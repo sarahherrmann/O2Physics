@@ -58,6 +58,10 @@ struct analyseMFTTracks {
     int nChargedPrimaryParticles = 0;
     auto z = mcCollision.posZ();
 
+
+//printf les constituants, le mctracklabel
+//boucle sur les collisions associées à une mccollision, tracks associés à cette collision et remplir un psuedojet xsavec
+
     for (auto& particle : particles) {
       auto p = pdg->GetParticle(particle.pdgCode());
 
