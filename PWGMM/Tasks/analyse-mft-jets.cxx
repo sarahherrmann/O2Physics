@@ -13,18 +13,22 @@
 #include "Framework/AnalysisTask.h"
 
 #include "TDatabasePDG.h"
-#include "Common/Core/MC.h"
+#include "TLorentzVector.h"
+#include "MathUtils/Utils.h"
 
 using namespace o2;
 using namespace o2::framework;
+using namespace fastjet;
 
 using Particles = aod::McParticles;
 
 //the task analyseMFTTracks loops over MFT tracks and generated particles and fills basic histograms
 
-struct analyseMFTTracks {
+struct analyseMFTJets {
   int icoll = 0;
   Service<TDatabasePDG> pdg;
+  double R = 0.7;
+  JetDefinition jet_def(cambridge_algorithm, R);
   HistogramRegistry registry{
     "registry",
     {
@@ -38,7 +42,7 @@ struct analyseMFTTracks {
 
     auto z = collision.posZ();
 
-    auto groupedTracks = tracks.sliceBy(o2::aod::fwdtrack::collisionId, collision.globalIndex());
+    //auto groupedTracks = tracks.sliceBy(o2::aod::fwdtrack::collisionId, collision.globalIndex());
 
 
     for (auto& track : tracks)
@@ -52,15 +56,38 @@ struct analyseMFTTracks {
   //end of processRec
   PROCESS_SWITCH(analyseMFTTracks, processRec, "Process rec level", true);
 
-  void processGen(aod::McCollisions::iterator const& mcCollision, o2::soa::SmallGroups<soa::Join<aod::Collisions, aod::McCollisionLabels>> const& collisions, Particles const& particles, soa::Join<aod::MFTTracks, aod::McMFTTrackLabels> const& tracks)
+  void processGen(aod::McCollisions::iterator const& mcCollision, soa::Join<aod::Collisions, aod::McCollisionLabels> const& collisions, Particles const& particles, soa::Join<aod::MFTTracks, aod::McMFTTrackLabels> const& tracks)
   {
+    TLorentzVector vTrack;
+    std::vector<PseudoJet> particlesRec;
 
     int nChargedPrimaryParticles = 0;
     auto z = mcCollision.posZ();
 
-
+    LOGP(debug, "MC col {} has {} reco cols", mcCollision.globalIndex(), collisions.size());
 //printf les constituants, le mctracklabel
 //boucle sur les collisions associées à une mccollision, tracks associés à cette collision et remplir un psuedojet xsavec
+    for (auto& collision : collisions)
+    {
+      auto groupedTracks = tracks.sliceBy(o2::aod::fwdtrack::collisionId, collision.globalIndex());
+      for (auto& track : groupedTracks)
+      {
+        float phi = track.phi();
+        o2::math_utils::bringTo02Pi(phi);
+        vTrack.setPtEtaPhiM(0.2,track.eta(),phi,0.138);
+        particlesRec.push_back(PseudoJet(vTrack.Px(), vTrack.Py(), vTrack.Pz(), vTrack.E()));
+        //TLorentz vector setPtEtaPhiM avec m masse pion et pt=0.2
+        //pseudoJet avec v.Px(),v.Py(), v.Pz(), v.E()
+        //.pushback cf examplefastjet
+        particlesRec[particlesRec.size()-1].user_index(track.mcParticleId());
+        //user_index (track.McParticleId()) ou un truc du genre
+      }
+      //cluster bidule
+      //pour chaque jet ayant plus d'une particle imprimer les trucs
+    }
+
+
+
 
     for (auto& particle : particles) {
       auto p = pdg->GetParticle(particle.pdgCode());
@@ -80,7 +107,6 @@ struct analyseMFTTracks {
       }
     }
 
-    //registry.fill(HIST("NtrkZvtxGen"), nChargedPrimaryParticles, mcCollision.posZ());
   }
 
   PROCESS_SWITCH(analyseMFTTracks, processGen, "Process gen level", false);
