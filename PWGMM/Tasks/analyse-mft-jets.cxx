@@ -36,6 +36,11 @@ struct analyseMFTJets {
   Service<TDatabasePDG> pdg;
   double R = 0.7;
   JetDefinition jet_def(cambridge_algorithm, R);
+
+  fastjet::GhostedAreaSpec ghostareaspec(5, 1, 0.01); //ghost of maxrap=5, 1 repetition, small ghost area
+  fastjet::AreaType areaType = fastjet::active_area;
+  fastjet::AreaDefinition *areaDef = new fastjet::AreaDefinition(areaType, ghostareaspec);
+
   HistogramRegistry registry{
     "registry",
     {
@@ -67,12 +72,14 @@ struct analyseMFTJets {
     TLorentzVector vTrack;
     std::vector<PseudoJet> particlesRec;
 
-    int nChargedPrimaryParticles = 0;
-    auto z = mcCollision.posZ();
+    TLorentzVector vPart;
+    std::vector<PseudoJet> particlesGen;
+
+    //int nChargedPrimaryParticles = 0;
+    //auto z = mcCollision.posZ();
 
     LOGP(debug, "MC col {} has {} reco cols", mcCollision.globalIndex(), collisions.size());
-//printf les constituants, le mctracklabel
-//boucle sur les collisions associées à une mccollision, tracks associés à cette collision et remplir un psuedojet xsavec
+
     for (auto& collision : collisions)
     {
       printf("collision index : %d\n", collision.globalIndex());
@@ -83,22 +90,32 @@ struct analyseMFTJets {
         o2::math_utils::bringTo02Pi(phi);
         vTrack.setPtEtaPhiM(0.2,track.eta(),phi,0.138);
         particlesRec.push_back(PseudoJet(vTrack.Px(), vTrack.Py(), vTrack.Pz(), vTrack.E()));
-        //TLorentz vector setPtEtaPhiM avec m masse pion et pt=0.2
-        //pseudoJet avec v.Px(),v.Py(), v.Pz(), v.E()
-        //.pushback cf examplefastjet
         particlesRec[particlesRec.size()-1].user_index(track.mcParticleId());
-        //user_index (track.McParticleId()) ou un truc du genre
+
       }
-      //cluster bidule
-      //pour chaque jet ayant plus d'une particle imprimer les trucs
+
+      std::vector<fastjet::PseudoJet> jetsRec;
+      fastjet::ClusterSequenceArea cs(particlesRec, jet_def, areaDef);
+
+      jetsRec = cs.inclusive_jets(0.0);
+
+      for (unsigned i = 0; i < jetsRec.size(); i++)
+      {
+        printf("jet %d : pt %f y %f phi %f\n", i, jetsRec[i].pt(), jetsRec[i].rap(), jetsRec[i].phi());
+        vector<PseudoJet> constituents = jetsRec[i].constituents();
+        for (unsigned j = 0; j < constituents.size(); j++)
+        {
+          printf("constituent %d : pt %f y %f phi %f\n", j, constituents[j].pt(), constituents[j].rap(), constituents[j].phi());
+        }
+      }
     }
 
 
 
 
-    for (auto& particle : particles) {
+    for (auto& particle : particles)
+    {
       auto p = pdg->GetParticle(particle.pdgCode());
-
       int charge = 0;
       if (p != nullptr)
       {
@@ -112,6 +129,10 @@ struct analyseMFTJets {
       }
     }
 
+    std::vector<fastjet::PseudoJet> jetsGen;
+    fastjet::ClusterSequenceArea csGen(particlesGen, jet_def, areaDef);
+
+    jetsGen = csGen.inclusive_jets(0.0);
   }
 
   PROCESS_SWITCH(analyseMFTJets, processGen, "Process gen level", true);
