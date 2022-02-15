@@ -16,13 +16,20 @@
 #include "TLorentzVector.h"
 #include "MathUtils/Utils.h"
 
+#include <fastjet/config.h>
+#include <fastjet/PseudoJet.hh>
+#include <fastjet/JetDefinition.hh>
+#include <fastjet/ClusterSequence.hh>
+#include <fastjet/ClusterSequenceArea.hh>
+#include <fastjet/AreaDefinition.hh>
+
 using namespace o2;
 using namespace o2::framework;
 using namespace fastjet;
 
 using Particles = aod::McParticles;
 
-//the task analyseMFTTracks loops over MFT tracks and generated particles and fills basic histograms
+//the task analyseMFTJets loops over MFT tracks and generated particles and fills basic histograms
 
 struct analyseMFTJets {
   int icoll = 0;
@@ -47,14 +54,13 @@ struct analyseMFTJets {
 
     for (auto& track : tracks)
     {
-      registry.fill(HIST("TracksEtaZvtx"), track.eta(), z);
       float phi = track.phi();
       o2::math_utils::bringTo02Pi(phi);
       registry.fill(HIST("TracksPhiEta"), phi, track.eta());
     }
   }
   //end of processRec
-  PROCESS_SWITCH(analyseMFTTracks, processRec, "Process rec level", true);
+  PROCESS_SWITCH(analyseMFTJets, processRec, "Process rec level", true);
 
   void processGen(aod::McCollisions::iterator const& mcCollision, soa::Join<aod::Collisions, aod::McCollisionLabels> const& collisions, Particles const& particles, soa::Join<aod::MFTTracks, aod::McMFTTrackLabels> const& tracks)
   {
@@ -69,6 +75,7 @@ struct analyseMFTJets {
 //boucle sur les collisions associées à une mccollision, tracks associés à cette collision et remplir un psuedojet xsavec
     for (auto& collision : collisions)
     {
+      printf("collision index : %d\n", collision.globalIndex());
       auto groupedTracks = tracks.sliceBy(o2::aod::fwdtrack::collisionId, collision.globalIndex());
       for (auto& track : groupedTracks)
       {
@@ -97,25 +104,23 @@ struct analyseMFTJets {
       {
         charge = p->Charge();
       }
-      if (charge != 0 && particle.isPhysicalPrimary()) {
-        registry.fill(HIST("TracksEtaZvtxGen"), particle.eta(), z);
-        registry.fill(HIST("TracksPhiEtaGen"), particle.phi(), particle.eta());
-
-        registry.fill(HIST("TracksPhiEtaGen"), particle.phi(), particle.eta());
-        registry.fill(HIST("NtrkEtaGen"), particle.eta());
-        nChargedPrimaryParticles++;
+      if (charge != 0 && particle.isPhysicalPrimary())
+      {
+        vPart.setPtEtaPhiM(particle.pt(),particle.eta(),particle.phi(),p->Mass());
+        particlesGen.push_back(PseudoJet(vPart.Px(), vPart.Py(), vPart.Pz(), vPart.E()));
+        particlesGen[particlesGen.size()-1].user_index(particle.globalIndex());
       }
     }
 
   }
 
-  PROCESS_SWITCH(analyseMFTTracks, processGen, "Process gen level", false);
+  PROCESS_SWITCH(analyseMFTJets, processGen, "Process gen level", true);
 };
-//end of the task analyseMFTTracks
+//end of the task analyseMFTJets
 
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
 {
   return WorkflowSpec{
-    adaptAnalysisTask<analyseMFTTracks>(cfgc),
+    adaptAnalysisTask<analyseMFTJets>(cfgc),
   };
 }

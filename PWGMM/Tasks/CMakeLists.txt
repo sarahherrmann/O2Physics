@@ -33,3 +33,8 @@ o2physics_add_dpl_workflow(lumi
                     SOURCES lumi.cxx
                     PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore
                     COMPONENT_NAME Analysis)
+
+o2physics_add_dpl_workflow(analyse-mft-jets
+                    SOURCES analyse-mft-jets.cxx
+                    PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore FastJet::FastJet FastJet::Contrib
+                    COMPONENT_NAME Analysis)
