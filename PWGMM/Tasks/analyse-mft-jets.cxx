@@ -40,7 +40,7 @@ struct analyseMFTJets {
 
   fastjet::Strategy strategy = fastjet::Best;
   fastjet::RecombinationScheme recombScheme = fastjet::E_scheme;
-  float jetR=0.4;
+  float jetR=0.7;
   fastjet::JetDefinition *jet_def = new fastjet::JetDefinition(fastjet::cambridge_algorithm, jetR, recombScheme, strategy); //
 
   fastjet::GhostedAreaSpec *ghostareaspec = new fastjet::GhostedAreaSpec(5., 1, 0.05); //ghost
@@ -92,12 +92,13 @@ struct analyseMFTJets {
     float Ntracks = 0;
     float Nparts = 0;
 
-    //int nChargedPrimaryParticles = 0;
-    //auto z = mcCollision.posZ();
+    std::vector<fastjet::PseudoJet> jetsRec;
+    std::vector<fastjet::PseudoJet> jetsGen;
 
-    printf("%f\n", tracks[0].eta());
+    //printf("%f\n", tracks.rawIteratorAt(0).eta());
 
-    LOGP(debug, "MC col {} has {} reco cols", mcCollision.globalIndex(), collisions.size());
+    //LOGP(debug, "MC col {} has {} reco cols", mcCollision.globalIndex(), collisions.size());
+    printf("MC col %lld has %lld reco cols\n", mcCollision.globalIndex(), collisions.size());
 
     for (auto& collision : collisions)
     {
@@ -113,28 +114,30 @@ struct analyseMFTJets {
         particlesRec[particlesRec.size()-1].set_user_index(track.mcParticleId());//set_user_index
 
       }
-
-      std::vector<fastjet::PseudoJet> jetsRec;
-      fastjet::ClusterSequenceArea cs(particlesRec, *jet_def, *areaDef);
-
-      jetsRec = cs.inclusive_jets(0.0);
-
-      for (unsigned i = 0; i < jetsRec.size(); i++)
-      {
-        //printf("jet %d : pt %f y %f phi %f\n", i, jetsRec[i].pt(), jetsRec[i].rap(), jetsRec[i].phi());
-        std::vector<PseudoJet> constituents = jetsRec[i].constituents();
-
-        registry.fill(HIST("AreaRecojet"), jetsRec[i].area());
-
-        registry.fill(HIST("NTracksPerJet"), constituents.size());
-        for (unsigned j = 0; j < constituents.size(); j++)
-        {
-        //  printf("constituent %d : pt %f, y %f, phi %f, index %d\n", j, constituents[j].pt(), constituents[j].rap(), constituents[j].phi(), constituents[j].user_index());
-        }
-      }
     }
 
+    //Here is tries to do a jet with the reconstructed tracks that can come from diff collisions, but same
+    //mcCollision (for now), most of the time there is just one or 0 collision
+    //This does not really represent the reality -> we should put the clustering in the collision loop
+    fastjet::ClusterSequenceArea cs(particlesRec, *jet_def, *areaDef);
+    jetsRec = cs.inclusive_jets(0.0);
 
+    for (unsigned i = 0; i < jetsRec.size(); i++)
+    {
+      //printf("jet %d : pt %f y %f phi %f\n", i, jetsRec[i].pt(), jetsRec[i].rap(), jetsRec[i].phi());
+      std::vector<PseudoJet> constituents = jetsRec[i].constituents();
+      if (constituents.size()==1)//we ignore the jets with just one constituent
+      {
+        continue;
+      }
+
+      registry.fill(HIST("AreaRecojet"), jetsRec[i].area());
+      registry.fill(HIST("NTracksPerJet"), constituents.size());
+      for (unsigned j = 0; j < constituents.size(); j++)
+      {
+      //  printf("constituent %d : pt %f, y %f, phi %f, index %d\n", j, constituents[j].pt(), constituents[j].rap(), constituents[j].phi(), constituents[j].user_index());
+      }
+    }
 
 
     for (auto& particle : particles)
@@ -155,27 +158,54 @@ struct analyseMFTJets {
       }
     }
 
-    std::vector<fastjet::PseudoJet> jetsGen;
+
     fastjet::ClusterSequenceArea csGen(particlesGen, *jet_def, *areaDef);
 
     jetsGen = csGen.inclusive_jets(0.0);
-
+    int nTrueConst;
+    int nJetGen=0;
+    int nTrueJet=0;
     for (unsigned i = 0; i < jetsGen.size(); i++)
     {
       //printf("jet %d : pt %f y %f phi %f\n", i, jetsGen[i].pt(), jetsGen[i].rap(), jetsGen[i].phi());
       std::vector<PseudoJet> constituents = jetsGen[i].constituents();
-
+      if (constituents.size()==1)//we ignore the jets with just one constituent
+      {
+        continue;
+      }
+      nJetGen++;
       registry.fill(HIST("AreaMCjetVsPt"), jetsGen[i].area(), jetsGen[i].pt());
       registry.fill(HIST("AreaMCjet"), jetsGen[i].area());
       registry.fill(HIST("NPartsPerJet"), constituents.size());
-      for (unsigned j = 0; j < constituents.size(); j++)
+      for (unsigned l = 0; l < jetsRec.size(); l++)
       {
-        //printf("constituent %d : pt %f, y %f, phi %f, index %d\n", j, constituents[j].pt(), constituents[j].rap(), constituents[j].phi(), constituents[j].user_index());
-        //particles[mother0Id]
+        //printf("jet %d : pt %f y %f phi %f\n", i, jetsRec[i].pt(), jetsRec[i].rap(), jetsRec[i].phi());
+        nTrueConst = 0;
+        std::vector<PseudoJet> constituentsRec = jetsRec[l].constituents();
+        for (unsigned m = 0; m < constituentsRec.size(); m++)
+        {
+          for (unsigned j = 0; j < constituents.size(); j++)
+          {
+            //printf("constituent %d : pt %f, y %f, phi %f, index %d\n", j, constituents[j].pt(), constituents[j].rap(), constituents[j].phi(), constituents[j].user_index());
+            //particles[mother0Id]
+
+            if (constituentsRec[m].user_index()==constituents[j].user_index())
+            {
+              nTrueConst++;
+              //printf("yeah %d\n", nTrueConst);
+            }
+          }
+        }
+        if (nTrueConst/float(constituents.size())>0.7)
+        {
+          //printf("one true jet with purity %f, and number of constituents %lu\n", nTrueConst/float(constituents.size()), constituents.size());
+          nTrueJet++;
+        }
       }
+
     }
 
-
+    printf("-------In this mcCollision there was %d jet generated and %d true jets reconstructed\n", nJetGen,nTrueJet);
     registry.fill(HIST("NTracksOverNparts"), Ntracks/Nparts);
   }
 
