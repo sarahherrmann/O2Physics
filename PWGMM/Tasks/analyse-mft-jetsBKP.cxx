@@ -11,7 +11,6 @@
 
 #include "Framework/runDataProcessing.h"
 #include "Framework/AnalysisTask.h"
-#include "Common/Core/RecoDecay.h"
 
 #include "TDatabasePDG.h"
 #include "TLorentzVector.h"
@@ -60,11 +59,9 @@ struct analyseMFTJets {
       {"AreaRecojet", "area of jet in reco MC; area; #count", {HistType::kTH1F, {{300, 0, 30}}}}, //
       {"AreaMCjetVsPt", "area of jet in gen MC vs #p_T^{jet}; area; pt; #count", {HistType::kTH2F, {{300, 0, 30}, {200, 0, 10}}}}, //
       {"NJetGenOverNJetTrue", "Number of generated jet / Number of true jets; ratio; #count", {HistType::kTH1F, {{800, 0, 4}}}}, //
-      {"NJetTrue2AndNJetRec", "Correlation between number of reconstructed jets and number of true jets; NjetsRec; NjetsTrue; #count", {HistType::kTH2F, {{21, 0, 20},{21, 0, 20}}}},
-      {"NJetTrueOverGen", "Correlation between number of reconstructed jets and number of true jets; NjetsRec; NjetsTrue; #count", {HistType::kTH2F, {{21, 0, 20},{21, 0, 20}}}},
+      {"NJetGenOverNJetTrue2", "Number of generated jet / Number of true jets; ratio; #count", {HistType::kTH1F, {{800, 0, 4}}}},
       {"EtaRecEtaGen", "; #eta_{Rec}; #eta_{Gen}; tracks", {HistType::kTH2F, {{35, -4.5, -1.}, {35, -4.5, -1.}}}},
       {"PhiRecPhiGen", "; #phi_{Rec}; #phi_{Gen}; tracks", {HistType::kTH2F, {{600, 0, 2*M_PI}, {600, 0, 2*M_PI}}}},
-      {"TracksPt", "; #p_{T} (GeV/c); tracks", {HistType::kTH1F, {{400, 0, 0.1}}}}, //
 
     }                                                                                //
   };
@@ -88,8 +85,6 @@ struct analyseMFTJets {
     std::vector<fastjet::PseudoJet> jetsRec;
     std::vector<fastjet::PseudoJet> jetsGen;
 
-    std::vector<fastjet::PseudoJet> jetsPartRec;
-
     //printf("%f\n", tracks.rawIteratorAt(0).eta());
 
     //LOGP(debug, "MC col {} has {} reco cols", mcCollision.globalIndex(), collisions.size());
@@ -104,55 +99,25 @@ struct analyseMFTJets {
       {
         float phi = track.phi();
         o2::math_utils::bringTo02Pi(phi);
-        vTrack.SetPtEtaPhiM(0.2,track.eta(),phi,0);
+        vTrack.SetPtEtaPhiM(0.2,track.eta(),phi,0.138);
         //---test
         //
 
         if (track.has_mcParticle())
         {
           auto particleTrack = track.mcParticle();
-          registry.fill(HIST("TracksPt"), particleTrack.pt());
           //printf("SIZE===%llu\n", particles.size());
 
           //printf("----pt %f\n", particleTrack.pt());
           auto p = pdg->GetParticle(particleTrack.pdgCode());
           int mass = 0;
-          // if (p != nullptr)
-          // {
-          //   mass = p->Mass();
-          // }
-          //vTrack.SetPtEtaPhiM(particleTrack.pt(),track.eta(),phi,mass);
-          vTrackPart.SetPtEtaPhiM(particleTrack.pt(),particleTrack.eta(),particleTrack.phi(),mass);
+          if (p != nullptr)
+          {
+            mass = p->Mass();
+          }
+          vTrack.SetPtEtaPhiM(particleTrack.pt(),track.eta(),phi,mass);
           registry.fill(HIST("EtaRecEtaGen"), track.eta(), particleTrack.eta());
           registry.fill(HIST("PhiRecPhiGen"), phi, particleTrack.phi());
-
-          particlesTrackRec.push_back(PseudoJet(vTrackPart.Px(), vTrackPart.Py(), vTrackPart.Pz(), vTrackPart.E()));
-          particlesTrackRec[particlesTrackRec.size()-1].set_user_index(track.mcParticleId());//set_user_index
-
-          auto Id = particleTrack.has_mothers();//has_mothers fonctionne
-          //std::cout << typeid(Id).name() << std::endl;
-
-          auto particleMother=particleTrack;
-          int stage =0;
-          while (particleMother.has_mothers() && stage<5)
-          {
-            stage++;
-            auto indexMotherTmp = particleMother.mothersIds().front();
-            printf("-----INDEX : %d\n", indexMotherTmp);
-            auto mBegin = particles.begin();
-            //std::cout << typeid(mBegin).name() << std::endl;
-            //printf("%d\n", mBegin);
-            auto offset = particles.offset();
-            printf("offset %d\n", offset);
-            if (indexMotherTmp < (particles.size()-1+offset))
-            {
-              particleMother = particles.rawIteratorAt(indexMotherTmp);
-              //particleMother = particles.iteratorAt(indexMotherTmp);
-              printf("PDG CODE %d\n", particleMother.pdgCode());
-            }
-
-          }
-
         }
         //printf("MCPARTICLEID  %d\n", testnb);
 
@@ -168,9 +133,6 @@ struct analyseMFTJets {
     //This does not really represent the reality -> we should put the clustering in the collision loop
     fastjet::ClusterSequenceArea cs(particlesRec, *jet_defRec, *areaDef);
     jetsRec = cs.inclusive_jets(0.0);
-
-    fastjet::ClusterSequenceArea csT2P(particlesTrackRec, *jet_defRec, *areaDef);
-    jetsPartRec = csT2P.inclusive_jets(0.0);
 
     for (unsigned i = 0; i < jetsRec.size(); i++)
     {
@@ -202,7 +164,7 @@ struct analyseMFTJets {
       //charged primary and within the MFT acceptance
       {
         Nparts++;
-        vPart.SetPtEtaPhiM(particle.pt(),particle.eta(),particle.phi(),0);
+        vPart.SetPtEtaPhiM(particle.pt(),particle.eta(),particle.phi(),p->Mass());
         particlesGen.push_back(PseudoJet(vPart.Px(), vPart.Py(), vPart.Pz(), vPart.E()));
         particlesGen[particlesGen.size()-1].set_user_index(particle.globalIndex());
       }
@@ -257,8 +219,6 @@ struct analyseMFTJets {
 
     int nTrueJet2=0;
     int nJetRec=0;
-    int nTrueConst2=0;
-    int nTrueJet3=0;
     for (unsigned i = 0; i < jetsRec.size(); i++)
     {
       //printf("jet %d : pt %f y %f phi %f\n", i, jetsRec[i].pt(), jetsRec[i].rap(), jetsRec[i].phi());
@@ -272,36 +232,8 @@ struct analyseMFTJets {
 
       for (unsigned j = 0; j < jetsGen.size(); j++)//we compare jetRec i with jetGen j
       {
-        nTrueConst2=0;//for now no constituent in common
-        std::vector<PseudoJet> constituentsGen = jetsGen[j].constituents();
-        if (constituentsGen.size()==1)//we ignore the jets with just one constituent
-        {
-          continue;
-        }
-
-        for (unsigned l = 0; l < constituentsGen.size(); l++)
-        {
-          for (unsigned m = 0; m < constituentsRec.size(); m++)
-          {
-            if (constituentsRec[m].user_index()==constituentsGen[l].user_index())
-            {
-              nTrueConst2++;
-            }
-          }
-
-        }
-
-        if (nTrueConst/float(constituentsRec.size())>0.7)
-        {
-          //printf("one true jet with purity %f, and number of constituents %lu\n", nTrueConst/float(constituents.size()), constituents.size());
-          nTrueJet3++;
-        }
-      }
-
-      for (unsigned j = 0; j < jetsPartRec.size(); j++)//we compare jetRec i with jetGen j
-      {
         nTrueConst=0;//for now no constituent in common
-        std::vector<PseudoJet> constituentsGen = jetsPartRec[j].constituents();
+        std::vector<PseudoJet> constituentsGen = jetsGen[j].constituents();
         if (constituentsGen.size()==1)//we ignore the jets with just one constituent
         {
           continue;
@@ -333,13 +265,9 @@ struct analyseMFTJets {
       printf("-------In this mcCollision there was %d jet generated and %d jets reco %d true jets reconstructed and true jets 2 reco %d\n", nJetGen, nJetRec, nTrueJet, nTrueJet2);
     }
 
-
-
-
     registry.fill(HIST("NTracksOverNparts"), Ntracks/Nparts);
     registry.fill(HIST("NJetGenOverNJetTrue"), nJetGen/1.0*nTrueJet);
-    registry.fill(HIST("NJetTrueOverGen"), nJetRec, nTrueJet3);
-    registry.fill(HIST("NJetTrue2AndNJetRec"), nJetRec, nTrueJet2);
+    registry.fill(HIST("NJetGenOverNJetTrue2"), 1.0*nTrueJet2/nJetGen);
   }
 
   PROCESS_SWITCH(analyseMFTJets, processGen, "Process gen level", true);
