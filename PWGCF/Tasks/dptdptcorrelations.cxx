@@ -20,6 +20,7 @@
 #include "PWGCF/TableProducer/dptdptfilter.h"
 #include "Common/DataModel/TrackSelectionTables.h"
 #include "Framework/runDataProcessing.h"
+#include <CCDB/BasicCCDBManager.h>
 #include <TROOT.h>
 #include <TDatabasePDG.h>
 #include <TParameter.h>
@@ -32,6 +33,7 @@
 #include <TProfile3D.h>
 
 #include <cmath>
+#include <ctime>
 
 using namespace o2;
 using namespace o2::framework;
@@ -58,15 +60,6 @@ float deltaphiup = constants::math::TwoPI - deltaphibinwidth / 2.0;
 bool processpairs = false;
 std::string fTaskConfigurationString = "PendingToConfigure";
 
-/// \enum TrackPairs
-/// \brief The track combinations hadled by the class
-enum TrackPairs {
-  kOO = 0,    ///< one-one pairs
-  kOT,        ///< one-two pairs
-  kTO,        ///< two-one pairs
-  kTT,        ///< two-two pairs
-  nTrackPairs ///< the number of track pairs
-};
 } // namespace correlationstask
 
 // Task for building <dpt,dpt> correlations
@@ -78,11 +71,14 @@ struct DptDptCorrelationsTask {
     // The DptDptCorrelationsAnalysisTask output objects
     //============================================================================================
     /* histograms */
+    TH1F* fhVertexZA;                 //!<! the z vertex distribution for the current multiplicity/centrality class
     TH1F* fhN1_vsPt[2];               //!<! weighted single particle distribution vs \f$p_T\f$, track 1 and 2
     TH2F* fhN1_vsEtaPhi[2];           //!<! weighted single particle distribution vs \f$\eta,\;\phi\f$, track 1 and 2
     TH2F* fhSum1Pt_vsEtaPhi[2];       //!<! accumulated sum of weighted \f$p_T\f$ vs \f$\eta,\;\phi\f$, track 1 and 2
     TH3F* fhN1_vsZEtaPhiPt[2];        //!<! single particle distribution vs \f$\mbox{vtx}_z,\; \eta,\;\phi,\;p_T\f$, track 1 and 2
     TH3F* fhSum1Pt_vsZEtaPhiPt[2];    //!<! accumulated sum of weighted \f$p_T\f$ vs \f$\mbox{vtx}_z,\; \eta,\;\phi,\;p_T\f$, track 1 and 2
+    TH3* fhNuaNue_vsZEtaPhiPt[2];     //!<! NUA+NUE correction vs \f$\mbox{vtx}_z,\; \eta,\;\phi,\;p_T\f$, track 1 and 2
+    TH2* fhPtAvg_vsEtaPhi[2];         //!<! average \f$p_T\f$ vs \f$\eta,\;\phi\f$, track 1 and 2
     TH2F* fhN2_vsPtPt[4];             //!<! track 1 and 2 weighted two particle distribution vs \f${p_T}_1, {p_T}_2\f$
     TH2F* fhN2_vsDEtaDPhi[4];         //!<! two-particle distribution vs \f$\Delta\eta,\;\Delta\phi\f$ 1-1,1-2,2-1,2-2, combinations
     TH2F* fhSum2PtPt_vsDEtaDPhi[4];   //!<! two-particle  \f$\sum {p_T}_1 {p_T}_2\f$ distribution vs \f$\Delta\eta,\;\Delta\phi\f$ 1-1,1-2,2-1,2-2, combinations
@@ -99,8 +95,24 @@ struct DptDptCorrelationsTask {
     TProfile* fhSum2PtPtnw_vsC[4];   //!<! un-weighted accumulated \f${p_T}_1 {p_T}_2\f$ distribution vs event centrality/multiplicity 1-1,1-2,2-1,2-2, combinations
     TProfile* fhSum2DptDptnw_vsC[4]; //!<! un-weighted accumulated \f$\sum ({p_T}_1- <{p_T}_1>) ({p_T}_2 - <{p_T}_2>) \f$ distribution vs \f$\Delta\eta,\;\Delta\phi\f$ distribution vs event centrality/multiplicity 1-1,1-2,2-1,2-2, combinations
 
+    /// \enum TrackPairs
+    /// \brief The track combinations hadled by the class
+    typedef enum {
+      kOO = 0,    ///< one-one pairs
+      kOT,        ///< one-two pairs
+      kTO,        ///< two-one pairs
+      kTT,        ///< two-two pairs
+      nTrackPairs ///< the number of track pairs
+    } trackpairs;
+
     const char* tname[2] = {"1", "2"}; ///< the external track names, one and two, for histogram creation
     const char* trackPairsNames[4] = {"OO", "OT", "TO", "TT"};
+    bool ccdbstored = false;
+
+    float isCCDBstored()
+    {
+      return ccdbstored;
+    }
 
     /// \brief Returns the potentially phi origin shifted phi
     /// \param phi the track azimuthal angle
@@ -175,17 +187,63 @@ struct DptDptCorrelationsTask {
       return fhN2_vsDEtaDPhi[kOO]->GetBin(deltaeta_ix + 1, deltaphi_ix + 1);
     }
 
+    void storeTrackCorrections(TH3* corrs1, TH3* corrs2)
+    {
+      LOGF(info, "Stored NUA&NUE corrections for track one %s and track two %s", corrs1 != nullptr ? "yes" : "no", corrs2 != nullptr ? "yes" : "no");
+      fhNuaNue_vsZEtaPhiPt[0] = corrs1;
+      fhNuaNue_vsZEtaPhiPt[1] = corrs2;
+      ccdbstored = true;
+    }
+
+    void storePtAverages(TH2* ptavgs1, TH2* ptavgs2)
+    {
+      LOGF(info, "Stored pT average for track one %s and track two %s", ptavgs1 != nullptr ? "yes" : "no", ptavgs2 != nullptr ? "yes" : "no");
+      fhPtAvg_vsEtaPhi[0] = ptavgs1;
+      fhPtAvg_vsEtaPhi[1] = ptavgs2;
+      ccdbstored = true;
+    }
+
+    template <typename TrackListObject>
+    std::vector<float>* getTrackCorrections(TrackListObject const& tracks, int tix, float zvtx)
+    {
+      std::vector<float>* corr = new std::vector<float>(tracks.size(), 1.0f);
+      if (fhNuaNue_vsZEtaPhiPt[tix] != nullptr) {
+        int index = 0;
+        for (auto t : tracks) {
+          (*corr)[index] = fhNuaNue_vsZEtaPhiPt[tix]->GetBinContent(zvtx, GetEtaPhiIndex(t) + 0.5, t.pt());
+          index++;
+        }
+      }
+      return corr;
+    }
+
+    template <typename TrackListObject>
+    std::vector<float>* getPtAvg(TrackListObject const& tracks, int tix)
+    {
+      std::vector<float>* ptavg = new std::vector<float>(tracks.size(), 0.0f);
+      if (fhPtAvg_vsEtaPhi[tix] != nullptr) {
+        int index = 0;
+        for (auto t : tracks) {
+          (*ptavg)[index] = fhPtAvg_vsEtaPhi[tix]->GetBinContent(fhPtAvg_vsEtaPhi[tix]->FindBin(t.eta(), t.phi()));
+          index++;
+        }
+      }
+      return ptavg;
+    }
+
     /// \brief fills the singles histograms in singles execution mode
     /// \param passedtracks filtered table with the tracks associated to the passed index
     /// \param tix index, in the singles histogram bank, for the passed filetered track table
     template <typename TrackListObject>
-    void processSingles(TrackListObject const& passedtracks, int tix, float zvtx)
+    void processSingles(TrackListObject const& passedtracks, std::vector<float>* corrs, int tix, float zvtx)
     {
+      int index = 0;
       for (auto& track : passedtracks) {
-        double corr = 1.0; /* TODO: track correction  weights */
+        float corr = (*corrs)[index];
         fhN1_vsPt[tix]->Fill(track.pt(), corr);
         fhN1_vsZEtaPhiPt[tix]->Fill(zvtx, GetEtaPhiIndex(track) + 0.5, track.pt(), corr);
-        fhSum1Pt_vsZEtaPhiPt[tix]->Fill(zvtx, GetEtaPhiIndex(track) + 0.5, track.pt(), corr);
+        fhSum1Pt_vsZEtaPhiPt[tix]->Fill(zvtx, GetEtaPhiIndex(track) + 0.5, track.pt(), track.pt() * corr);
+        index++;
       }
     }
 
@@ -194,7 +252,7 @@ struct DptDptCorrelationsTask {
     /// \param tix index, in the singles histogram bank, for the passed filetered track table
     /// \param cmul centrality - multiplicity for the collision being analyzed
     template <typename TrackListObject>
-    void processTracks(TrackListObject const& passedtracks, int tix, float cmul)
+    void processTracks(TrackListObject const& passedtracks, std::vector<float>* corrs, int tix, float cmul)
     {
       LOGF(DPTDPTLOGCOLLISIONS, "Processing %d tracks of type %d in a collision with cent/mult %f ", passedtracks.size(), tix, cmul);
 
@@ -203,8 +261,9 @@ struct DptDptCorrelationsTask {
       double sum1Pt = 0;   ///< accumulated sum of weighted track 1 \f$p_T\f$ for current collision
       double n1nw = 0;     ///< not weighted number of track 1 tracks for current collision
       double sum1Ptnw = 0; ///< accumulated sum of not weighted track 1 \f$p_T\f$ for current collision
+      int index = 0;
       for (auto& track : passedtracks) {
-        double corr = 1.0; /* TODO: track correction  weights */
+        float corr = (*corrs)[index];
         n1 += corr;
         sum1Pt += track.pt() * corr;
         n1nw += 1;
@@ -212,6 +271,7 @@ struct DptDptCorrelationsTask {
 
         fhN1_vsEtaPhi[tix]->Fill(track.eta(), GetShiftedPhi(track.phi()), corr);
         fhSum1Pt_vsEtaPhi[tix]->Fill(track.eta(), GetShiftedPhi(track.phi()), track.pt() * corr);
+        index++;
       }
       fhN1_vsC[tix]->Fill(cmul, n1);
       fhSum1Pt_vsC[tix]->Fill(cmul, sum1Pt);
@@ -225,8 +285,8 @@ struct DptDptCorrelationsTask {
     /// \param pix index, in the track combination histogram bank, for the passed filetered track tables
     /// \param cmul centrality - multiplicity for the collision being analyzed
     /// Be aware that at least in half of the cases traks1 and trks2 will have the same content
-    template <typename TrackOneListObject, typename TrackTwoListObject>
-    void processTrackPairs(TrackOneListObject const& trks1, TrackTwoListObject const& trks2, int pix, float cmul)
+    template <trackpairs pix, typename TrackOneListObject, typename TrackTwoListObject>
+    void processTrackPairs(TrackOneListObject const& trks1, TrackTwoListObject const& trks2, std::vector<float>* corrs1, std::vector<float>* corrs2, std::vector<float>* ptavgs1, std::vector<float>* ptavgs2, float cmul)
     {
       /* process pair magnitudes */
       double n2 = 0;           ///< weighted number of track 1 track 2 pairs for current collision
@@ -235,33 +295,37 @@ struct DptDptCorrelationsTask {
       double n2nw = 0;         ///< not weighted number of track1 track 2 pairs for current collision
       double sum2PtPtnw = 0;   ///< accumulated sum of not weighted track 1 track 2 \f${p_T}_1 {p_T}_2\f$ for current collision
       double sum2DptDptnw = 0; ///< accumulated sum of not weighted number of track 1 tracks times not weighted track 2 \f$p_T\f$ for current collision
+      int index1 = 0;
       for (auto& track1 : trks1) {
-        double ptavg_1 = 0.0; /* TODO: load ptavg_1 for eta1, phi1 bin */
-        double corr1 = 1.0;   /* TODO: track correction  weights */
+        double ptavg_1 = (*ptavgs1)[index1];
+        double corr1 = (*corrs1)[index1];
+        int index2 = 0;
         for (auto& track2 : trks2) {
-          /* checkiing the same track id condition */
-          if (track1 == track2) {
-            /* exclude autocorrelations */
-            continue;
-          } else {
-            /* process pair magnitudes */
-            double ptavg_2 = 0.0; /* TODO: load ptavg_2 for eta2, phi2 bin */
-            double corr2 = 1.0;   /* TODO: track correction  weights */
-            double corr = corr1 * corr2;
-            double dptdpt = (track1.pt() - ptavg_1) * (track2.pt() - ptavg_2);
-            n2 += corr;
-            sum2PtPt += track1.pt() * track2.pt() * corr;
-            sum2DptDpt += corr * dptdpt;
-            n2nw += 1;
-            sum2PtPtnw += track1.pt() * track2.pt();
-            sum2DptDptnw += dptdpt;
-            /* get the global bin for filling the differential histograms */
-            int globalbin = GetDEtaDPhiGlobalIndex(track1, track2);
-            fhN2_vsDEtaDPhi[pix]->AddBinContent(globalbin, corr);
-            fhSum2DptDpt_vsDEtaDPhi[pix]->AddBinContent(globalbin, corr * dptdpt);
-            fhSum2PtPt_vsDEtaDPhi[pix]->AddBinContent(globalbin, track1.pt() * track2.pt() * corr);
-            fhN2_vsPtPt[pix]->Fill(track1.pt(), track2.pt(), corr);
+          /* checking the same track id condition */
+          if constexpr (pix == kOO or pix == kTT) {
+            if (track1 == track2) {
+              /* exclude autocorrelations */
+              continue;
+            }
           }
+          /* process pair magnitudes */
+          double ptavg_2 = (*ptavgs2)[index2];
+          double corr2 = (*corrs2)[index2];
+          double corr = corr1 * corr2;
+          double dptdptnw = (track1.pt() - ptavg_1) * (track2.pt() - ptavg_2);
+          double dptdptw = (corr1 * track1.pt() - ptavg_1) * (corr2 * track2.pt() - ptavg_2);
+          n2 += corr;
+          sum2PtPt += track1.pt() * track2.pt() * corr;
+          sum2DptDpt += dptdptw;
+          n2nw += 1;
+          sum2PtPtnw += track1.pt() * track2.pt();
+          sum2DptDptnw += dptdptnw;
+          /* get the global bin for filling the differential histograms */
+          int globalbin = GetDEtaDPhiGlobalIndex(track1, track2);
+          fhN2_vsDEtaDPhi[pix]->AddBinContent(globalbin, corr);
+          fhSum2DptDpt_vsDEtaDPhi[pix]->AddBinContent(globalbin, dptdptw);
+          fhSum2PtPt_vsDEtaDPhi[pix]->AddBinContent(globalbin, track1.pt() * track2.pt() * corr);
+          fhN2_vsPtPt[pix]->Fill(track1.pt(), track2.pt(), corr);
         }
       }
       fhN2_vsC[pix]->Fill(cmul, n2);
@@ -280,22 +344,33 @@ struct DptDptCorrelationsTask {
     void processCollision(TrackOneListObject const& Tracks1, TrackTwoListObject const& Tracks2, float zvtx, float centmult)
     {
       using namespace correlationstask;
+      std::vector<float>* corrs1 = getTrackCorrections(Tracks1, 0, zvtx);
+      std::vector<float>* corrs2 = getTrackCorrections(Tracks2, 1, zvtx);
 
       if (not processpairs) {
         /* process single tracks */
-        processSingles(Tracks1, 0, zvtx); /* track one */
-        processSingles(Tracks2, 1, zvtx); /* track two */
+        fhVertexZA->Fill(zvtx);
+        processSingles(Tracks1, corrs1, 0, zvtx); /* track one */
+        processSingles(Tracks2, corrs2, 1, zvtx); /* track two */
       } else {
         /* process track magnitudes */
+        std::vector<float>* ptavgs1 = getPtAvg(Tracks1, 0);
+        std::vector<float>* ptavgs2 = getPtAvg(Tracks2, 1);
+
         /* TODO: the centrality should be chosen non detector dependent */
-        processTracks(Tracks1, 0, centmult); /* track one */
-        processTracks(Tracks2, 1, centmult); /* track one */
+        processTracks(Tracks1, corrs1, 0, centmult); /* track one */
+        processTracks(Tracks2, corrs2, 1, centmult); /* track one */
         /* process pair magnitudes */
-        processTrackPairs(Tracks1, Tracks1, kOO, centmult);
-        processTrackPairs(Tracks1, Tracks2, kOT, centmult);
-        processTrackPairs(Tracks2, Tracks1, kTO, centmult);
-        processTrackPairs(Tracks2, Tracks2, kTT, centmult);
+        processTrackPairs<kOO>(Tracks1, Tracks1, corrs1, corrs1, ptavgs1, ptavgs1, centmult);
+        processTrackPairs<kOT>(Tracks1, Tracks2, corrs1, corrs2, ptavgs1, ptavgs2, centmult);
+        processTrackPairs<kTO>(Tracks2, Tracks1, corrs2, corrs1, ptavgs2, ptavgs1, centmult);
+        processTrackPairs<kTT>(Tracks2, Tracks2, corrs2, corrs2, ptavgs2, ptavgs2, centmult);
+
+        delete ptavgs1;
+        delete ptavgs2;
       }
+      delete corrs1;
+      delete corrs2;
     }
 
     void init(TList* fOutputList)
@@ -308,6 +383,8 @@ struct DptDptCorrelationsTask {
       TH1::AddDirectory(kFALSE);
 
       if (!processpairs) {
+        fhVertexZA = new TH1F("VertexZA", "Vertex Z; z_{vtx}", zvtxbins, zvtxlow, zvtxup);
+        fOutputList->Add(fhVertexZA);
         for (int i = 0; i < 2; ++i) {
           /* histograms for each track, one and two */
           fhN1_vsPt[i] = new TH1F(TString::Format("n1_%s_vsPt", tname[i]).Data(),
@@ -330,6 +407,8 @@ struct DptDptCorrelationsTask {
           fhN1_vsZEtaPhiPt[i]->Sumw2(false);
           fhSum1Pt_vsZEtaPhiPt[i]->SetBit(TH1::kIsNotW);
           fhSum1Pt_vsZEtaPhiPt[i]->Sumw2(false);
+          fhNuaNue_vsZEtaPhiPt[i] = nullptr;
+          fhPtAvg_vsEtaPhi[i] = nullptr;
 
           fOutputList->Add(fhN1_vsPt[i]);
           fOutputList->Add(fhN1_vsZEtaPhiPt[i]);
@@ -357,6 +436,8 @@ struct DptDptCorrelationsTask {
                                        100, 0.0, 100.0);
           fhSum1Ptnw_vsC[i] = new TProfile(TString::Format("sumPtNw_%s_vsM", tname[i]).Data(),
                                            TString::Format("#LT #Sigma p_{t,%s} #GT;Centrality/Multiplicity (%%);#LT #Sigma p_{t,%s} #GT (GeV/c)", tname[i], tname[i]).Data(), 100, 0.0, 100.0);
+          fhNuaNue_vsZEtaPhiPt[i] = nullptr;
+          fhPtAvg_vsEtaPhi[i] = nullptr;
           fOutputList->Add(fhN1_vsEtaPhi[i]);
           fOutputList->Add(fhSum1Pt_vsEtaPhi[i]);
           fOutputList->Add(fhN1_vsC[i]);
@@ -414,6 +495,8 @@ struct DptDptCorrelationsTask {
     }
   }; // DataCollectingEngine
 
+  Service<o2::ccdb::BasicCCDBManager> ccdb;
+
   /* the data memebers for this task */
   /* the centrality / multiplicity limits for collecting data in this task instance */
   int ncmranges = 0;
@@ -423,12 +506,21 @@ struct DptDptCorrelationsTask {
   /* the data collecting engine instances */
   DataCollectingEngine** dataCE;
 
+  /* the input file structure from CCDB */
+  TList* ccdblst = nullptr;
+  bool loadfromccdb = false;
+
   Configurable<bool> cfgProcessPairs{"processpairs", false, "Process pairs: false = no, just singles, true = yes, process pairs"};
   Configurable<std::string> cfgCentSpec{"centralities", "00-05,05-10,10-20,20-30,30-40,40-50,50-60,60-70,70-80", "Centrality/multiplicity ranges in min-max separated by commas"};
 
   Configurable<o2::analysis::DptDptBinningCuts> cfgBinning{"binning",
                                                            {28, -7.0, 7.0, 18, 0.2, 2.0, 16, -0.8, 0.8, 72, 0.5},
                                                            "triplets - nbins, min, max - for z_vtx, pT, eta and phi, binning plus bin fraction of phi origin shift"};
+  struct : ConfigurableGroup {
+    Configurable<std::string> cfgCCDBUrl{"input_ccdburl", "http://ccdb-test.cern.ch:8080", "The CCDB url for the input file"};
+    Configurable<std::string> cfgCCDBPathName{"input_ccdbpath", "", "The CCDB path for the input file. Default \"\", i.e. don't load from CCDB"};
+    Configurable<std::string> cfgCCDBDate{"input_ccdbdate", "20220307", "The CCDB date for the input file"};
+  } cfginputfile;
 
   OutputObj<TList> fOutput{"DptDptCorrelationsData", OutputObjHandlingPolicy::AnalysisObject};
 
@@ -452,6 +544,7 @@ struct DptDptCorrelationsTask {
     phiup = constants::math::TwoPI;
     phibinshift = cfgBinning->mPhibinshift;
     processpairs = cfgProcessPairs.value;
+    loadfromccdb = cfginputfile.cfgCCDBPathName->length() > 0;
     /* update the potential binning change */
     etabinwidth = (etaup - etalow) / float(etabins);
     phibinwidth = (phiup - philow) / float(phibins);
@@ -520,6 +613,10 @@ struct DptDptCorrelationsTask {
         LOGF(info, " centrality/multipliicty range: %d, low limit: %f, up limit: %f", i, fCentMultMin[i], fCentMultMax[i]);
       }
     }
+    /* initialize access to the CCDB */
+    ccdb->setURL(cfginputfile.cfgCCDBUrl);
+    ccdb->setCaching(true);
+    ccdb->setLocalObjectValidityChecking();
   }
 
   /// \brief Get the data collecting engine index corresponding to the passed collision
@@ -537,6 +634,23 @@ struct DptDptCorrelationsTask {
     return ixDCE;
   }
 
+  TList* getCCDBInput(const char* ccdbpath, const char* ccdbdate)
+  {
+    std::tm cfgtm = {};
+    std::stringstream ss(ccdbdate);
+    ss >> std::get_time(&cfgtm, "%Y%m%d");
+    cfgtm.tm_hour = 12;
+    long timestamp = std::mktime(&cfgtm) * 1000;
+
+    TList* lst = ccdb->getForTimeStamp<TList>(ccdbpath, timestamp);
+    if (lst != nullptr) {
+      LOGF(info, "Correctly loaded CCDB input object");
+    } else {
+      LOGF(error, "CCDB input object could not be loaded");
+    }
+    return lst;
+  }
+
   Filter onlyacceptedcollisions = (aod::dptdptfilter::collisionaccepted == uint8_t(true));
   Filter onlyacceptedtracks = ((aod::dptdptfilter::trackacceptedasone == uint8_t(true)) or (aod::dptdptfilter::trackacceptedastwo == uint8_t(true)));
 
@@ -544,9 +658,22 @@ struct DptDptCorrelationsTask {
   {
     using namespace correlationstask;
 
+    if (ccdblst == nullptr) {
+      if (loadfromccdb) {
+        ccdblst = getCCDBInput(cfginputfile.cfgCCDBPathName->c_str(), cfginputfile.cfgCCDBDate->c_str());
+      }
+    }
+
     /* locate the data collecting engine for the collision centrality/multiplicity */
     int ixDCE = getDCEindex(collision);
     if (not(ixDCE < 0)) {
+      if (ccdblst != nullptr and not dataCE[ixDCE]->isCCDBstored()) {
+        dataCE[ixDCE]->storeTrackCorrections((TH3*)ccdblst->FindObject(TString::Format("correction_%02d-%02d_p1", int(fCentMultMin[ixDCE]), int(fCentMultMax[ixDCE])).Data()),
+                                             (TH3*)ccdblst->FindObject(TString::Format("correction_%02d-%02d_m1", int(fCentMultMin[ixDCE]), int(fCentMultMax[ixDCE])).Data()));
+        dataCE[ixDCE]->storePtAverages((TH2*)ccdblst->FindObject(TString::Format("ptavgetaphi_%02d-%02d_p", int(fCentMultMin[ixDCE]), int(fCentMultMax[ixDCE])).Data()),
+                                       (TH2*)ccdblst->FindObject(TString::Format("ptavgetaphi_%02d-%02d_m", int(fCentMultMin[ixDCE]), int(fCentMultMax[ixDCE])).Data()));
+      }
+
       Partition<o2::aod::ScannedTracks> TracksOne = aod::dptdptfilter::trackacceptedasone == uint8_t(true);
       Partition<o2::aod::ScannedTracks> TracksTwo = aod::dptdptfilter::trackacceptedastwo == uint8_t(true);
       TracksOne.bindTable(tracks);
@@ -563,9 +690,20 @@ struct DptDptCorrelationsTask {
   {
     using namespace correlationstask;
 
+    if (ccdblst == nullptr) {
+      if (loadfromccdb) {
+        ccdblst = getCCDBInput(cfginputfile.cfgCCDBPathName->c_str(), cfginputfile.cfgCCDBDate->c_str());
+      }
+    }
+
     /* locate the data collecting engine for the collision centrality/multiplicity */
     int ixDCE = getDCEindex(collision);
     if (not(ixDCE < 0)) {
+      if (ccdblst != nullptr and not dataCE[ixDCE]->isCCDBstored()) {
+        dataCE[ixDCE]->storePtAverages((TH2*)ccdblst->FindObject(TString::Format("trueptavgetaphi_%02d-%02d_p", int(fCentMultMin[ixDCE]), int(fCentMultMax[ixDCE])).Data()),
+                                       (TH2*)ccdblst->FindObject(TString::Format("trueptavgetaphi_%02d-%02d_m", int(fCentMultMin[ixDCE]), int(fCentMultMax[ixDCE])).Data()));
+      }
+
       Partition<o2::aod::ScannedTrueTracks> TracksOne = aod::dptdptfilter::trackacceptedasone == uint8_t(true);
       Partition<o2::aod::ScannedTrueTracks> TracksTwo = aod::dptdptfilter::trackacceptedastwo == uint8_t(true);
       TracksOne.bindTable(tracks);
