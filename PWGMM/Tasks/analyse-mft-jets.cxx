@@ -23,6 +23,8 @@
 #include "fastjet/PseudoJet.hh"
 #include "fastjet/JetDefinition.hh"
 
+#include "analyse-mft-jets.h"
+
 using namespace o2;
 using namespace o2::framework;
 using namespace fastjet;
@@ -90,6 +92,9 @@ struct analyseMFTJets {
 
     std::vector<fastjet::PseudoJet> jetsPartRec;
 
+    int vertex_number=-1;
+    int pdg_id = 21;
+
     //printf("%f\n", tracks.rawIteratorAt(0).eta());
 
     //LOGP(debug, "MC col {} has {} reco cols", mcCollision.globalIndex(), collisions.size());
@@ -126,21 +131,16 @@ struct analyseMFTJets {
           registry.fill(HIST("EtaRecEtaGen"), track.eta(), particleTrack.eta());
           registry.fill(HIST("PhiRecPhiGen"), phi, particleTrack.phi());
 
-          particlesTrackRec.push_back(PseudoJet(vTrackPart.Px(), vTrackPart.Py(), vTrackPart.Pz(), vTrackPart.E()));
-          particlesTrackRec[particlesTrackRec.size()-1].set_user_index(track.mcParticleId());//set_user_index
-
-          auto Id = particleTrack.has_mothers();//has_mothers fonctionne
-          //std::cout << typeid(Id).name() << std::endl;
-
           auto particleMother=particleTrack;
           int stage =0;
-
+          int motherPDG=0;
           while (particleMother.has_mothers())// && stage<5
           {
             stage++;
             auto const& mother = particleMother.mothers_first_as<aod::McParticles>();
             printf("PDG CODE %d\n", mother.pdgCode());
             particleMother = mother;
+            motherPDG = mother.pdgCode();
             // auto indexMotherTmp = particleMother.mothersIds().front();
             // printf("-----INDEX : %d\n", indexMotherTmp);
             // auto mBegin = particles.begin();
@@ -158,7 +158,15 @@ struct analyseMFTJets {
           }
           printf("stage = %d\n", stage);
 
+          pdg_id = motherPDG;
+
         }
+
+          particlesTrackRec.push_back(PseudoJet(vTrackPart.Px(), vTrackPart.Py(), vTrackPart.Pz(), vTrackPart.E()));
+          particlesTrackRec[particlesTrackRec.size()-1].set_user_index(track.mcParticleId());//set_user_index
+          particlesTrackRec[particlesTrackRec.size()-1].set_user_info(new MyUserInfo(pdg_id, vertex_number));
+
+
         //printf("MCPARTICLEID  %d\n", testnb);
 
         //---end of test
