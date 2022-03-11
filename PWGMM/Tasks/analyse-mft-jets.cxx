@@ -134,24 +134,29 @@ struct analyseMFTJets {
 
           auto particleMother=particleTrack;
           int stage =0;
-          while (particleMother.has_mothers() && stage<5)
+
+          while (particleMother.has_mothers())// && stage<5
           {
             stage++;
-            auto indexMotherTmp = particleMother.mothersIds().front();
-            printf("-----INDEX : %d\n", indexMotherTmp);
-            auto mBegin = particles.begin();
-            //std::cout << typeid(mBegin).name() << std::endl;
-            //printf("%d\n", mBegin);
-            auto offset = particles.offset();
-            printf("offset %d\n", offset);
-            if (indexMotherTmp < (particles.size()-1+offset))
-            {
-              particleMother = particles.rawIteratorAt(indexMotherTmp);
-              //particleMother = particles.iteratorAt(indexMotherTmp);
-              printf("PDG CODE %d\n", particleMother.pdgCode());
-            }
+            auto const& mother = particleMother.mothers_first_as<aod::McParticles>();
+            printf("PDG CODE %d\n", mother.pdgCode());
+            particleMother = mother;
+            // auto indexMotherTmp = particleMother.mothersIds().front();
+            // printf("-----INDEX : %d\n", indexMotherTmp);
+            // auto mBegin = particles.begin();
+            // //std::cout << typeid(mBegin).name() << std::endl;
+            // //printf("%d\n", mBegin);
+            // auto offset = particles.offset();
+            // printf("offset %d\n", offset);
+            // if (indexMotherTmp < (particles.size()-1+offset))
+            // {
+            //   particleMother = particles.rawIteratorAt(indexMotherTmp);
+            //   //particleMother = particles.iteratorAt(indexMotherTmp);
+            //   printf("PDG CODE %d\n", particleMother.pdgCode());
+            // }
 
           }
+          printf("stage = %d\n", stage);
 
         }
         //printf("MCPARTICLEID  %d\n", testnb);
