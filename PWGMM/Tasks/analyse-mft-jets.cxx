@@ -68,10 +68,42 @@ struct analyseMFTJets {
       {"PhiRecPhiGen", "; #phi_{Rec}; #phi_{Gen}; tracks", {HistType::kTH2F, {{600, 0, 2*M_PI}, {600, 0, 2*M_PI}}}},
       {"TracksPt", "; #p_{T} (GeV/c); tracks", {HistType::kTH1F, {{400, 0, 0.1}}}}, //
 
+      {"NJetTrueMotherVsNJetGen", "Correlation between number of gen jets having the same mother and number of gen jet; NjetsGen; NjetsGenSameMother; #count", {HistType::kTH2F, {{21, 0, 20},{21, 0, 20}}}},
+
     }                                                                                //
   };
 
 
+  int mostFrequent(std::vector<int> v)
+  { //Returns the maximum frequency of the most frequent element in a vector
+    // The array must be sorted
+    int n = v.size();
+    std::sort(v.begin(), v.end());
+
+    // find the max frequency using linear traversal
+    int max_count = 1, res = v[0], curr_count = 1;
+    for (int i = 1; i < n; i++) {
+        if (v[i] == v[i - 1])
+            curr_count++;
+        else {
+            if (curr_count > max_count) {
+                max_count = curr_count;
+                res = v[i - 1];
+            }
+            curr_count = 1;
+        }
+    }
+
+    // If last element is most frequent
+    if (curr_count > max_count)
+    {
+        max_count = curr_count;
+        res = v[n - 1];
+    }
+
+    //return res;
+    return max_count;
+  }
 
   void processGen(aod::McCollisions::iterator const& mcCollision, o2::soa::SmallGroups<soa::Join<aod::Collisions, aod::McCollisionLabels>> const& collisions, Particles const& particles, soa::Join<aod::MFTTracks, aod::McMFTTrackLabels> const& tracks)
   {
@@ -138,7 +170,7 @@ struct analyseMFTJets {
           {
             stage++;
             auto const& mother = particleMother.mothers_first_as<aod::McParticles>();
-            printf("PDG CODE %d\n", mother.pdgCode());
+            //printf("PDG CODE %d\n", mother.pdgCode());
             particleMother = mother;
             motherPDG = mother.pdgCode();
             // auto indexMotherTmp = particleMother.mothersIds().front();
@@ -156,7 +188,7 @@ struct analyseMFTJets {
             // }
 
           }
-          printf("stage = %d\n", stage);
+          //printf("stage = %d\n", stage);
 
           pdg_id = motherPDG;
 
@@ -216,8 +248,24 @@ struct analyseMFTJets {
       {
         Nparts++;
         vPart.SetPtEtaPhiM(particle.pt(),particle.eta(),particle.phi(),0);
+
+        auto particleMother=particle;
+        int stage =0;
+        int motherPDG=0;
+        while (particleMother.has_mothers())// && stage<5
+        {
+          stage++;
+          auto const& mother = particleMother.mothers_first_as<aod::McParticles>();
+          //printf("PDG CODE %d\n", mother.pdgCode());
+          particleMother = mother;
+          motherPDG = mother.globalIndex();//.pdgCode();
+        }
+        pdg_id = motherPDG;
+
+
         particlesGen.push_back(PseudoJet(vPart.Px(), vPart.Py(), vPart.Pz(), vPart.E()));
         particlesGen[particlesGen.size()-1].set_user_index(particle.globalIndex());
+        particlesGen[particlesGen.size()-1].set_user_info(new MyUserInfo(pdg_id, vertex_number));
       }
     }
 
@@ -228,6 +276,7 @@ struct analyseMFTJets {
     int nTrueConst;
     int nJetGen=0;
     int nTrueJet=0;
+    int nJetGenTrueMother=0;
     for (unsigned i = 0; i < jetsGen.size(); i++)
     {
       //printf("jet %d : pt %f y %f phi %f\n", i, jetsGen[i].pt(), jetsGen[i].rap(), jetsGen[i].phi());
@@ -237,6 +286,23 @@ struct analyseMFTJets {
         continue;
       }
       nJetGen++;
+
+      //Part for the mother IDs
+      std::vector<int> motherIDsGen = {};
+      for (unsigned jconst = 0; jconst < constituents.size(); jconst++)
+      {
+        motherIDsGen.push_back(constituents[jconst].user_info<MyUserInfo>().pdg_id());
+        printf("jet nb %d global motherid of the constituent %d\n", i, motherIDsGen[jconst]);
+      }
+
+      int maxnb = mostFrequent(motherIDsGen);
+      printf("maxnb %d\n", maxnb);
+      if (maxnb/constituents.size()>0.7)//then it means that more than 70% of the jets constituents have the same mother (with their globalid)
+      {
+        nJetGenTrueMother++;
+      }
+
+
       registry.fill(HIST("AreaMCjetVsPt"), jetsGen[i].area(), jetsGen[i].pt());
       registry.fill(HIST("AreaMCjet"), jetsGen[i].area());
       registry.fill(HIST("NPartsPerJet"), constituents.size());
@@ -341,10 +407,10 @@ struct analyseMFTJets {
 
 
     }
-    if (nJetRec>0)
-    {
-      printf("-------In this mcCollision there was %d jet generated and %d jets reco %d true jets reconstructed and true jets 2 reco %d\n", nJetGen, nJetRec, nTrueJet, nTrueJet2);
-    }
+    // if (nJetRec>0)
+    // {
+    //   printf("-------In this mcCollision there was %d jet generated and %d jets reco %d true jets reconstructed and true jets 2 reco %d\n", nJetGen, nJetRec, nTrueJet, nTrueJet2);
+    // }
 
 
 
@@ -353,6 +419,7 @@ struct analyseMFTJets {
     registry.fill(HIST("NJetGenOverNJetTrue"), nJetGen/1.0*nTrueJet);
     registry.fill(HIST("NJetTrueOverGen"), nJetRec, nTrueJet3);
     registry.fill(HIST("NJetTrue2AndNJetRec"), nJetRec, nTrueJet2);
+    registry.fill(HIST("NJetTrueMotherVsNJetGen"), nJetGen, nJetGenTrueMother);
   }
 
   PROCESS_SWITCH(analyseMFTJets, processGen, "Process gen level", true);
