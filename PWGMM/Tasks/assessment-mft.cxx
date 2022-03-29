@@ -30,16 +30,25 @@ struct AssessmentMFT {
   };
 
 
-  void process(aod::MFTTracks const& tracks)
+
+
+  void process(aod::Collisions const& collision, aod::MFTTracks const& tracks)
   {
     for (auto& track : tracks)
     {
-    float phi = track.phi();
-    o2::math_utils::bringTo02Pi(phi);
-    registry.fill(HIST("TracksPhiEta"), phi, track.eta());
+      float phi = track.phi();
+      o2::math_utils::bringTo02Pi(phi);
+      registry.fill(HIST("TracksPhiEta"), phi, track.eta());
+      if (collision.has_foundBC())
+      {
+        auto collisionBC = collision.bcId();
+        auto seconds = (collisionBC* o2::constants::lhc::LHCBunchSpacingNS + track.trackTime() )/1e9;
+      }
 
-    registry.fill(HIST("TracksTime"), track.trackTime());
+      registry.fill(HIST("TracksTime"), seconds);
+
     }
+    //printf("minTrackTime = %f, maxTrackTime = %f\n", minTrackTime, maxTrackTime);
   }
 
 
