@@ -32,6 +32,10 @@ o2physics_add_dpl_workflow(ue-charged
 o2physics_add_dpl_workflow(lumi
                     SOURCES lumi.cxx
                     PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore
+                                          O2::ReconstructionDataFormats
+                                          O2::DetectorsBase
+                                          O2::DetectorsCommonDataFormats
+                                          O2::DetectorsVertexing
                     COMPONENT_NAME Analysis)
 
 o2physics_add_dpl_workflow(analyse-mft-jets
