@@ -62,8 +62,9 @@ struct analyseMFTJets {
       {"AreaRecojet", "area of jet in reco MC; area; #count", {HistType::kTH1F, {{300, 0, 30}}}}, //
       {"AreaMCjetVsPt", "area of jet in gen MC vs #p_T^{jet}; area; pt; #count", {HistType::kTH2F, {{300, 0, 30}, {200, 0, 10}}}}, //
       {"NJetGenOverNJetTrue", "Number of generated jet / Number of true jets; ratio; #count", {HistType::kTH1F, {{800, 0, 4}}}}, //
+      {"NJetRecVsNJetGen", "Correlation between number of reconstructed jets and number of gen jets; NjetsGen; NjetsRec; #count", {HistType::kTH2F, {{21, 0, 20},{21, 0, 20}}}},
       {"NJetTrue2AndNJetRec", "Correlation between number of reconstructed jets and number of true jets; NjetsRec; NjetsTrue; #count", {HistType::kTH2F, {{21, 0, 20},{21, 0, 20}}}},
-      {"NJetTrueOverGen", "Correlation between number of reconstructed jets and number of true jets; NjetsRec; NjetsTrue; #count", {HistType::kTH2F, {{21, 0, 20},{21, 0, 20}}}},
+      {"NJetTrue3AndNJetRec", "Correlation between number of reconstructed jets and number of true jets; NjetsRec; NjetsTrue; #count", {HistType::kTH2F, {{21, 0, 20},{21, 0, 20}}}},
       {"EtaRecEtaGen", "; #eta_{Rec}; #eta_{Gen}; tracks", {HistType::kTH2F, {{35, -4.5, -1.}, {35, -4.5, -1.}}}},
       {"PhiRecPhiGen", "; #phi_{Rec}; #phi_{Gen}; tracks", {HistType::kTH2F, {{600, 0, 2*M_PI}, {600, 0, 2*M_PI}}}},
       {"TracksPt", "; #p_{T} (GeV/c); tracks", {HistType::kTH1F, {{400, 0, 0.1}}}}, //
@@ -215,7 +216,7 @@ struct analyseMFTJets {
     jetsRec = cs.inclusive_jets(0.0);
 
     fastjet::ClusterSequenceArea csT2P(particlesTrackRec, *jet_defRec, *areaDef);
-    jetsPartRec = csT2P.inclusive_jets(0.0);
+    jetsPartRec = csT2P.inclusive_jets(0.0);//contains the jets clustered from the particle equivalent for tracks
 
     for (unsigned i = 0; i < jetsRec.size(); i++)
     {
@@ -291,7 +292,7 @@ struct analyseMFTJets {
       std::vector<int> motherIDsGen = {};
       for (unsigned jconst = 0; jconst < constituents.size(); jconst++)
       {
-        motherIDsGen.push_back(constituents[jconst].user_info<MyUserInfo>().pdg_id());
+        motherIDsGen.push_back(constituents[jconst].user_info<MyUserInfo>().pdg_id());//here this is not the pdg id but the mother index !!
         printf("jet nb %d global motherid of the constituent %d\n", i, motherIDsGen[jconst]);
       }
 
@@ -370,14 +371,14 @@ struct analyseMFTJets {
 
         }
 
-        if (nTrueConst/float(constituentsRec.size())>0.7)
+        if (nTrueConst2/float(constituentsRec.size())>0.7)
         {
           //printf("one true jet with purity %f, and number of constituents %lu\n", nTrueConst/float(constituents.size()), constituents.size());
           nTrueJet3++;
         }
       }
 
-      for (unsigned j = 0; j < jetsPartRec.size(); j++)//we compare jetRec i with jetGen j
+      for (unsigned j = 0; j < jetsPartRec.size(); j++)//we compare jetRec i with jetGenFromTrack j
       {
         nTrueConst=0;//for now no constituent in common
         std::vector<PseudoJet> constituentsGen = jetsPartRec[j].constituents();
@@ -406,7 +407,7 @@ struct analyseMFTJets {
       }
 
 
-    }
+    }// end of for (unsigned i = 0; i < jetsRec.size(); i++)
     // if (nJetRec>0)
     // {
     //   printf("-------In this mcCollision there was %d jet generated and %d jets reco %d true jets reconstructed and true jets 2 reco %d\n", nJetGen, nJetRec, nTrueJet, nTrueJet2);
@@ -417,7 +418,8 @@ struct analyseMFTJets {
 
     registry.fill(HIST("NTracksOverNparts"), Ntracks/Nparts);
     registry.fill(HIST("NJetGenOverNJetTrue"), nJetGen/1.0*nTrueJet);
-    registry.fill(HIST("NJetTrueOverGen"), nJetRec, nTrueJet3);
+    registry.fill(HIST("NJetRecVsNJetGen"), nJetGen, nJetRec);
+    registry.fill(HIST("NJetTrue3AndNJetRec"), nJetRec, nTrueJet3);
     registry.fill(HIST("NJetTrue2AndNJetRec"), nJetRec, nTrueJet2);
     registry.fill(HIST("NJetTrueMotherVsNJetGen"), nJetGen, nJetGenTrueMother);
   }
