@@ -14,7 +14,7 @@
 /// \author Robin Caron <robin.caron@cern.ch>
 /// \author Sarah Herrmann <sarah.herrmann@cern.ch>
 ///
-/// \brief This code loops over every ambiguous MFT tracks and associates 
+/// \brief This code loops over every ambiguous MFT tracks and associates
 /// them to a collision that has the smallest DCAxy
 #include <cmath>
 #include "ReconstructionDataFormats/TrackFwd.h"
