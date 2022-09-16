@@ -40,6 +40,10 @@ using MFTTracksLabeled = soa::Join<o2::aod::MFTTracks, aod::McMFTTrackLabels>;
 using FullBCs = soa::Join<aod::BCs, aod::MatchedBCCollisionsSparse>;
 using FullCollision = soa::Join<aod::Collisions, aod::McCollisionLabels>;
 
+AxisSpec ZAxis = {301, -30.1, 30.1};
+AxisSpec PhiAxis = {600, 0, 2 * M_PI};
+AxisSpec EtaAxis = {18, -4.6, -1.};
+
 namespace o2::aod
 {
 DECLARE_SOA_TABLE(AmbiguousTracksMFT, "AOD", "AMBIGUOUSTRMFT", //! Table for MFT tracks which are not uniquely associated with a collision
@@ -50,12 +54,14 @@ struct vertexingfwd {
 
   /// Could be TEMPORARY: store the vertex, collision, dca, and ambiguous tracks information
   /// into different std::vector to easily handle them later outside the loops
-  std::vector<int> vecCollForAmb;        // vector for collisions associated to an ambiguous track
+  std::vector<int> vecMcCollForAmb; // vector for collisions associated to an ambiguous track
+  std::vector<int> vecCollForAmb;
   std::vector<double> vecDCACollForAmb;  // vector for dca collision associated to an ambiguous track
   std::vector<double> vecAmbTrack;       // vector for ambiguous track quantities like chi2 and z
   std::vector<double> vecZposCollForAmb; // vector for z vertex of collisions associated to an ambiguous track
 
-  Configurable<float> maxDCAXY{"maxDCAXY", 6.0, "max allowed transverse DCA"}; // To be used when associating ambitrack to collision using best DCA
+  Configurable<float> maxDCAXY{"maxDCAXY", 6.0, "max allowed transverse DCA"};             // To be used when associating ambitrack to collision using best DCA
+  Configurable<float> maxDist{"maxDist", 6.0, "max allowed distance primVtx to Origin V"}; // distance from primary vertex to the origin of the particle
 
   HistogramRegistry registry{
     "registry",
@@ -63,6 +69,8 @@ struct vertexingfwd {
      {"TracksDCAX", "; DCA_{x} (cm); counts", {HistType::kTH1F, {{100, -10, 10}}}},
      {"TracksDCAY", "; DCA_{y} (cm); counts", {HistType::kTH1F, {{100, -10, 10}}}},
      {"AmbiguousTracksStatus", "; Status; counts", {HistType::kTH1F, {{6, -0.5, 5.5}}}},
+     {"MigrationStatus", "; ; counts", {HistType::kTH1F, {{6, -0.5, 5.5}}}},
+     {"MigTracksEtaZvtx", "; #eta; Z_{vtx}; tracks", {HistType::kTH2F, {EtaAxis, ZAxis}}},
      {"NbCollComp", "; NbCollComp", {HistType::kTH1F, {{20, -0.5, 19.5}}}},
      {"NumberOfContributors", "; N_{tr} for vertexing; counts", {HistType::kTH1F, {{100, 0, 100}}}},
      {"CollisionsMatchIndicesMC", "; Rec. minDCA ambitrack coll.ID; Gen. ambitrack coll.ID", {HistType::kTH2F, {{401, -0.5, 1000.5}, {401, -0.5, 1000.5}}}},
@@ -71,7 +79,9 @@ struct vertexingfwd {
      {"EfficiencyZvtx", "; z vertex; Efficiency", {HistType::kTProfile, {{100, -30, 30}}}},
      {"DeltaZvtx", "; #delta z (cm); counts", {HistType::kTH1F, {{400, -20, 20}}}},
      {"DeltaZvtxBest", "; #delta z = z_{best} - z_{true} (cm); counts", {HistType::kTH1F, {{400, -20, 20}}}},
-     {"CorrectMatch", "; Matching value; counts", {HistType::kTH1F, {{5, -0.5, 4.5}}}}}};
+     {"CorrectMatch", "; Matching value; counts", {HistType::kTH1F, {{5, -0.5, 4.5}}}},
+     {"DistToOrigin", "; D (#mu m); counts", {HistType::kTH1F, {{201, -0.05, 20.05}}}},
+     {"CorrectMatchDiff", "; Matching value; counts", {HistType::kTH1F, {{4, -0.5, 3.5}}}}}};
 
   void init(InitContext&)
   {
@@ -83,6 +93,13 @@ struct vertexingfwd {
     x1->SetBinLabel(4, "N_{ambitrack} w N_{coll} > 0");
     x1->SetBinLabel(5, "N_{ambitrack} total");
 
+    auto hstatdiff = registry.get<TH1>(HIST("CorrectMatchDiff"));
+    auto* xd = hstatdiff->GetXaxis();
+    xd->SetBinLabel(1, "N_{ambitrack} prompt");     // among all ambiguous tracks excluding orphans
+    xd->SetBinLabel(2, "Correct match prompt");     //           "           "
+    xd->SetBinLabel(3, "N_{ambitrack} non-prompt"); // idem
+    xd->SetBinLabel(4, "Correct match non-prompt");
+
     auto hstatus = registry.get<TH1>(HIST("AmbiguousTracksStatus"));
     auto* x2 = hstatus->GetXaxis();
     x2->SetBinLabel(1, "MFT tracks ");
@@ -91,6 +108,15 @@ struct vertexingfwd {
     x2->SetBinLabel(4, "Orphan + primary");
     x2->SetBinLabel(5, "All ambiguous secondary");
     x2->SetBinLabel(6, "Orphan + secondary");
+
+    auto hstatusmig = registry.get<TH1>(HIST("MigrationStatus"));
+    auto* xm = hstatusmig->GetXaxis();
+    xm->SetBinLabel(1, "bestcollision = collision");
+    xm->SetBinLabel(2, "bestcollision #neq collision");
+    xm->SetBinLabel(3, "collision.mcCollision = particle.mcCollision");
+    xm->SetBinLabel(4, "collision.mcCollision #neq particle.mcCollision");
+    xm->SetBinLabel(5, "bestcollision.mcCollision = collision.mcCollision");
+    xm->SetBinLabel(6, "bestcollision.mcCollision #neq collision.mcCollision");
   }
 
   int getIndexBestCollision(std::vector<double> vecOfDCA, int method = 0)
@@ -108,14 +134,14 @@ struct vertexingfwd {
   template <typename T>
   void doProcess(T const& ambitracks, aod::BCs const& bcs, MFTTracksLabeled const& tracks, FullCollision const& collisions, aod::McParticles const& mcParticles, aod::McCollisions const& mcCollisions)
   {
-    int ntracks = tracks.size();
+    int ntracks = tracks.size(); // warning: removes the un-labeled MFTTracks
     int nambitracks = ambitracks.size();
 
     registry.fill(HIST("AmbiguousTracksStatus"), 0.0, ntracks);
     registry.fill(HIST("AmbiguousTracksStatus"), 1.0, nambitracks);
 
     for (auto& ambitrack : ambitracks) {
-      vecCollForAmb.clear();
+      vecMcCollForAmb.clear();
       vecDCACollForAmb.clear();
       vecAmbTrack.clear();
       vecZposCollForAmb.clear();
@@ -124,8 +150,25 @@ struct vertexingfwd {
       double zVtxMCAmbi = 0; // z vertex associated to the mc collision
       int mcCollAmbiID = -1; // mc value for the collision containing the ambiguous track
 
-      //auto track = ambitrack.mfttrack_as<MFTTracksLabeled>(); // Obtain the MFT ambiguous track with the MC labels
-      auto track = ambitrack.template mfttrack_as<MFTTracksLabeled>(); //This is the synthax when calling a templated funcction on a template
+      int collisionID = -1;
+      int collisionMCID = -1;
+      int bestCollID = -1;
+
+      // auto track = ambitrack.mfttrack_as<MFTTracksLabeled>(); // Obtain the MFT ambiguous track with the MC labels
+      auto track = ambitrack.template mfttrack_as<MFTTracksLabeled>(); // This is the synthax when calling a templated funcction on a template
+      if (track.has_collision()) {
+        if (track.collisionId() > 0) {
+          collisionID = track.collisionId();
+          auto collisionForID = track.template collision_as<FullCollision>();
+          if (!collisionForID.has_mcCollision()) {
+            continue;
+          }
+
+          collisionMCID = collisionForID.mcCollision().globalIndex();
+        }
+      }
+
+      // if collisionID != -1 we then need to compare it with bestcollisionID
 
       if (!track.has_mcParticle()) {
         LOGF(warning, "No MC particle for ambiguous track, skip...");
@@ -155,15 +198,15 @@ struct vertexingfwd {
       int collCounter = 0;
       for (auto& collision : collisions) {
         uint64_t mostProbableBC = collision.bc().globalBC();
-        //uint64_t meanBC = mostProbableBC - std::lround(collision.collisionTime() / (o2::constants::lhc::LHCBunchSpacingNS / 1000));
-        //int deltaBC = std::ceil(collision.collisionTimeRes() / (o2::constants::lhc::LHCBunchSpacingNS / 1000) * 4);
+        // uint64_t meanBC = mostProbableBC - std::lround(collision.collisionTime() / (o2::constants::lhc::LHCBunchSpacingNS / 1000));
+        // int deltaBC = std::ceil(collision.collisionTimeRes() / (o2::constants::lhc::LHCBunchSpacingNS / 1000) * 4);
 
         for (auto& bcambi : bcambis) {
 
           if (bcambi.globalBC() != mostProbableBC) {
             continue;
           }
-          //here the bc of the ambitrack is the bc of the collision we are looking at
+          // here the bc of the ambitrack is the bc of the collision we are looking at
           collCounter++;
 
           // We compute the DCAxy of this track wrt the primary vertex of the current collision
@@ -193,30 +236,60 @@ struct vertexingfwd {
           }
 
           vecDCACollForAmb.push_back(dcaXY);
+          vecCollForAmb.push_back(collision.globalIndex());
 
           if (!collision.has_mcCollision()) {
             continue;
           }
 
           int mcCollindex = collision.mcCollision().globalIndex();
-          vecCollForAmb.push_back(mcCollindex);
+          vecMcCollForAmb.push_back(mcCollindex);
 
           vecZposCollForAmb.push_back(collision.mcCollision().posZ());
 
           registry.fill(HIST("DeltaZvtx"), collision.mcCollision().posZ() - zVtxMCAmbi);
-          break; //once we found a bc that corresponds to the bc of the collision we are working on, go out of the bcambi loop
-          //We then look at the next collision
+          break; // once we found a bc that corresponds to the bc of the collision we are working on, go out of the bcambi loop
+          // We then look at the next collision
         }
       }
 
       registry.fill(HIST("NbCollComp"), collCounter);
       registry.fill(HIST("CorrectMatch"), 4.0); // counting for ambiguous track with N collisions >=0
 
-      if (collCounter == 0) {                //these are orphan tracks
-        if (!particle.isPhysicalPrimary()) { //orphan and secondary
-          registry.fill(HIST("AmbiguousTracksStatus"), 5.0);
+      int indexMinDCA = getIndexBestCollision(vecDCACollForAmb, 0); // obtain min value in the stored vector of DCAs
+      if (indexMinDCA != -1) {
+        bestCollID = vecCollForAmb[indexMinDCA];
+      }
+      if ((bestCollID != -1) && (collisionID != -1)) {
+        // Let's check if we have migration
+        if (bestCollID == collisionID) // No migration from DCA best
+        {
+          registry.fill(HIST("MigrationStatus"), 0);
+        } else {
+          registry.fill(HIST("MigrationStatus"), 1);
         }
-        if (particle.isPhysicalPrimary()) { //orphan and primary
+
+        if (collisionMCID == mcCollAmbiID) // No migration from mcCollision
+        {
+          registry.fill(HIST("MigrationStatus"), 2);
+        } else {
+          registry.fill(HIST("MigrationStatus"), 3);
+          registry.fill(HIST("MigTracksEtaZvtx"), particle.eta(), zVtxMCAmbi);
+        }
+
+        if (vecMcCollForAmb[indexMinDCA] == collisionMCID) // No migration from DCA best mcCollision
+        {
+          registry.fill(HIST("MigrationStatus"), 4);
+        } else {
+          registry.fill(HIST("MigrationStatus"), 5);
+        }
+      }
+
+      if (collCounter == 0) {                                // these are orphan tracks
+        if (!particle.isPhysicalPrimary()) {                 // orphan and secondary
+          registry.fill(HIST("AmbiguousTracksStatus"), 5.0); // can be changed to orphan and non prompt
+        }
+        if (particle.isPhysicalPrimary()) { // orphan and primary
           registry.fill(HIST("AmbiguousTracksStatus"), 3.0);
         }
         continue;
@@ -224,16 +297,15 @@ struct vertexingfwd {
 
       registry.fill(HIST("CorrectMatch"), 3.0); // counting for ambiguous track with N collisions >0
 
-      int indexMinDCA = getIndexBestCollision(vecDCACollForAmb, 0); // obtain min value in the stored vector of DCAs
       int indexMCcoll = -1;
       if (indexMinDCA == -1) {
-        continue; //if no DCAxy was < maxDCAXY
+        continue; // if no DCAxy was < maxDCAXY
       }
-      indexMCcoll = vecCollForAmb[indexMinDCA];
+      indexMCcoll = vecMcCollForAmb[indexMinDCA];
 
       registry.fill(HIST("CollisionsMatchIndicesMC"), mcCollAmbiID, indexMCcoll);
 
-      if (collCounter == 1) { //This shouldn't happen after Ruben's fix
+      if (collCounter == 1) { // This shouldn't happen after Ruben's fix
         printf("strange ambiguous track of mfttrackId %d\n", ambitrack.mfttrackId());
         if (mcCollAmbiID == indexMCcoll) {
           printf("and this is a correct match for the ambiguous track of mfttrackid %d\n", ambitrack.mfttrackId());
@@ -242,7 +314,7 @@ struct vertexingfwd {
 
       registry.fill(HIST("DeltaZvtxBest"), vecZposCollForAmb[indexMinDCA] - zVtxMCAmbi);
 
-      if (mcCollAmbiID == indexMCcoll) { //correct match
+      if (mcCollAmbiID == indexMCcoll) { // correct match
         value = 1.0;
         // LOGF(info, " --> Ambitrack correctly associated to collision, dca= %f", vecDCACollForAmb[indexMinDCA]);
       }
@@ -251,12 +323,12 @@ struct vertexingfwd {
       registry.fill(HIST("EfficiencyZvtx"), zVtxMCAmbi, value);
       registry.fill(HIST("CorrectMatch"), 2.0); // Counting for amibuous track with N collisions > 0
 
-      if (value == 0.0) {                                                           //incorrect match
+      if (value == 0.0) {                                                           // incorrect match
         registry.fill(HIST("TracksDCAXYBestFalse"), vecDCACollForAmb[indexMinDCA]); // Incorrect association with min DCA
       }
 
     } // ambitracks loop
-  }   //end of doProcess
+  }   // end of doProcess
 
   void processNew(aod::AmbiguousMFTTracks const& ambitracks, aod::BCs const& bcs, MFTTracksLabeled const& tracks, FullCollision const& collisions, aod::McParticles const& mcParticles, aod::McCollisions const& mcCollisions)
   {
@@ -269,6 +341,19 @@ struct vertexingfwd {
     doProcess(ambitracks, bcs, tracks, collisions, mcParticles, mcCollisions);
   }
   PROCESS_SWITCH(vertexingfwd, processOld, "Process ambiguous track DCA", false);
+
+  void processDist(MFTTracksLabeled const& tracks, aod::McParticles const& mcParticles, aod::McCollisions const& mcCollisions)
+  {
+    for (auto& track : tracks) {
+      auto particle = track.mcParticle();
+
+      // Compute the distance from primary vertex to the origin of the particle
+      // The primary vertex being the real one (in McCollisions)
+      double dist = std::sqrt(pow(particle.vx() - particle.mcCollision().posX(), 2) + pow(particle.vy() - particle.mcCollision().posY(), 2) + pow(particle.vz() - particle.mcCollision().posZ(), 2)) * 1e4;
+      registry.fill(HIST("DistToOrigin"), dist); // in mum
+    }
+  }
+  PROCESS_SWITCH(vertexingfwd, processDist, "Process reconstructed particle's distance origin to prim vtx", true);
 };
 
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
