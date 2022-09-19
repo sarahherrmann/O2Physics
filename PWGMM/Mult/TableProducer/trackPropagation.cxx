@@ -61,7 +61,6 @@ using namespace o2;
 using namespace o2::framework;
 // using namespace o2::framework::expressions;
 
-
 struct MultiCollisionAssociation {
   Produces<aod::MatchedMulti> mm;
   struct {
@@ -210,7 +209,6 @@ struct AmbiguousTrackPropagation {
       SMatrix5 tpars(track.x(), track.y(), track.phi(), track.tgl(), track.signed1Pt());
       o2::track::TrackParCovFwd trackPar{track.z(), tpars, tcovs, track.chi2()};
 
-
       auto compatibleBCs = atrack.bc_as<ExtBCs>();
       for (auto& bc : compatibleBCs) {
         if (!bc.has_collisions()) {
@@ -220,7 +218,6 @@ struct AmbiguousTrackPropagation {
         for (auto const& collision : collisions) {
 
           trackPar.propagateToZhelix(collision.posZ(), Bz); // track parameters propagation to the position of the z vertex
-
 
           const auto dcaX(trackPar.getX() - collision.posX());
           const auto dcaY(trackPar.getY() - collision.posY());

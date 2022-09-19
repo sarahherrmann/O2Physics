@@ -286,7 +286,7 @@ struct vertexingfwd {
           registry.fill(HIST("MigrationStatus"), 2);
         } else {
           registry.fill(HIST("MigrationStatus"), 3);
-          //registry.fill(HIST("MigTracksEtaZvtx"), particle.eta(), zVtxMCAmbi);
+          // registry.fill(HIST("MigTracksEtaZvtx"), particle.eta(), zVtxMCAmbi);
         }
 
         if (vecMcCollForAmb[indexMinDCA] == collisionMCID) // No migration from DCA best mcCollision
@@ -343,29 +343,26 @@ struct vertexingfwd {
   }   // end of doProcess
   void processStudyDCAassigned(soa::Join<aod::Collisions, aod::McCollisionLabels>::iterator const& collision, MFTTracksLabeled const& tracks, aod::McParticles const&, aod::McCollisions const&, soa::SmallGroups<soa::Join<aod::AmbiguousMFTTracks, aod::BestCollisionsFwd>> const& atracks)
   {
-    registry.fill(HIST("CorrectMatch2"), 0, tracks.size());//all MFT tracks
-    registry.fill(HIST("CorrectMatch2"), 1, atracks.size());//ambitracks non orphans
+    registry.fill(HIST("CorrectMatch2"), 0, tracks.size());  // all MFT tracks
+    registry.fill(HIST("CorrectMatch2"), 1, atracks.size()); // ambitracks non orphans
 
-    for (auto& atrack : atracks)
-    {
-      //here collision=bestcollision
+    for (auto& atrack : atracks) {
+      // here collision=bestcollision
       auto track = atrack.mfttrack_as<MFTTracksLabeled>();
       auto particle = track.mcParticle();
       registry.fill(HIST("bestDCAXY"), atrack.bestDCAXY());
 
-      if (atrack.bestDCAXY() > maxDCAXY){continue;}//now only "associable" atracks
+      if (atrack.bestDCAXY() > maxDCAXY) {
+        continue;
+      } // now only "associable" atracks
       registry.fill(HIST("CorrectMatch2"), 2);
-      //auto collision = atrack.bestCollision_as<soa::Join<aod::Collisions, aod::McCollisionLabels>>();
-      if (collision.mcCollisionId()==particle.mcCollisionId())
-      {
+      // auto collision = atrack.bestCollision_as<soa::Join<aod::Collisions, aod::McCollisionLabels>>();
+      if (collision.mcCollisionId() == particle.mcCollisionId()) {
         registry.fill(HIST("CorrectMatch2"), 3);
-      }
-      else
-      {
+      } else {
         registry.fill(HIST("CorrectMatch2"), 4);
         registry.fill(HIST("MigTracksEtaZvtx"), particle.eta(), particle.mcCollision().posZ());
       }
-
     }
   }
   PROCESS_SWITCH(vertexingfwd, processStudyDCAassigned, "Process ambiguous track DCA with table bestcoll", true);

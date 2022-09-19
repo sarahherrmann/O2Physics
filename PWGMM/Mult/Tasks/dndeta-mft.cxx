@@ -68,11 +68,11 @@ struct PseudorapidityDensityMFT {
     {
       {"EventsNtrkZvtx", "; N_{trk}; #it{z}_{vtx} (cm); events", {HistType::kTH2F, {{301, -0.5, 300.5}, ZAxis}}}, //
       {"TracksEtaZvtx", "; #eta; #it{z}_{vtx} (cm); tracks", {HistType::kTH2F, {EtaAxis, ZAxis}}},                //
-      {"TracksPhiEta", "; #varphi; #eta; tracks", {HistType::kTH2F, {PhiAxis, EtaAxis}}},               //
+      {"TracksPhiEta", "; #varphi; #eta; tracks", {HistType::kTH2F, {PhiAxis, EtaAxis}}},                         //
       {"TracksPhiZvtx", "; #varphi; #it{z}_{vtx} (cm); tracks", {HistType::kTH2F, {PhiAxis, ZAxis}}},             //
-      {"TracksPtEta", " ; p_{T} (GeV/c); #eta", {HistType::kTH2F, {PtAxis, EtaAxis}}},                  //
-      {"EventSelection", ";status;events", {HistType::kTH1F, {{7, 0.5, 7.5}}}}                          //
-    }                                                                                                   //
+      {"TracksPtEta", " ; p_{T} (GeV/c); #eta", {HistType::kTH2F, {PtAxis, EtaAxis}}},                            //
+      {"EventSelection", ";status;events", {HistType::kTH1F, {{7, 0.5, 7.5}}}}                                    //
+    }                                                                                                             //
   };
 
   void init(InitContext&)
@@ -95,7 +95,7 @@ struct PseudorapidityDensityMFT {
       registry.add({"TracksEtaZvtxGen_t", "; #eta; #it{z}_{vtx} (cm); tracks", {HistType::kTH2F, {EtaAxis, ZAxis}}});
       registry.add({"TracksPhiEtaGen", "; #varphi; #eta; tracks", {HistType::kTH2F, {PhiAxis, EtaAxis}}});
       registry.add({"TracksPhiZvtxGen", "; #varphi; #it{z}_{vtx} (cm); tracks", {HistType::kTH2F, {PhiAxis, ZAxis}}}); //
-      registry.add({"TracksToPartPtEta", " ; p_{T} (GeV/c); #eta", {HistType::kTH2F, {PtAxis, EtaAxis}}});   //
+      registry.add({"TracksToPartPtEta", " ; p_{T} (GeV/c); #eta", {HistType::kTH2F, {PtAxis, EtaAxis}}});             //
       registry.add({"TracksPtEtaGen", " ; p_{T} (GeV/c); #eta", {HistType::kTH2F, {PtAxis, EtaAxis}}});
       registry.add({"TracksPtEtaGen_t", " ; p_{T} (GeV/c); #eta", {HistType::kTH2F, {PtAxis, EtaAxis}}});
       registry.add({"EventEfficiency", "; status; events", {HistType::kTH1F, {{5, 0.5, 5.5}}}});
@@ -168,11 +168,9 @@ struct PseudorapidityDensityMFT {
   {
     counter++;
     ambTrackIds.clear();
-    for (auto& track : atracks)
-    {
+    for (auto& track : atracks) {
       auto mfttrack = track.mfttrack();
-      if (mfttrack.has_collision())
-      {
+      if (mfttrack.has_collision()) {
         ambTrackIds.push_back(track.mfttrackId());
       }
     }
@@ -193,8 +191,7 @@ struct PseudorapidityDensityMFT {
       auto Ntrk = perCollisionSample.size() + atracks.size();
 
       registry.fill(HIST("EventsNtrkZvtx"), Ntrk, z);
-      for (auto& track : atracks)
-      {
+      for (auto& track : atracks) {
         registry.fill(HIST("TracksEtaZvtx"), track.etas(), z);
         float phi = track.phis();
         o2::math_utils::bringTo02Pi(phi);
