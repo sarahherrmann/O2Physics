@@ -29,8 +29,6 @@
 #include "CommonConstants/MathConstants.h"
 #include "CommonConstants/LHCConstants.h"
 
-#include "bestCollisionTable.h"
-
 using namespace o2;
 using namespace o2::framework;
 using namespace o2::track;
@@ -62,13 +60,12 @@ struct vertexingfwd {
   std::vector<double> vecAmbTrack;       // vector for ambiguous track quantities like chi2 and z
   std::vector<double> vecZposCollForAmb; // vector for z vertex of collisions associated to an ambiguous track
 
-  Configurable<float> maxDCAXY{"maxDCAXY", 2.0, "max allowed transverse DCA"};             // To be used when associating ambitrack to collision using best DCA
+  Configurable<float> maxDCAXY{"maxDCAXY", 6.0, "max allowed transverse DCA"};             // To be used when associating ambitrack to collision using best DCA
   Configurable<float> maxDist{"maxDist", 6.0, "max allowed distance primVtx to Origin V"}; // distance from primary vertex to the origin of the particle
 
   HistogramRegistry registry{
     "registry",
     {{"TracksDCAXY", "; DCA_{xy} (cm); counts", {HistType::kTH1F, {{100, -1, 10}}}},
-     {"bestDCAXY", "; DCA_{xy} (cm); counts", {HistType::kTH1F, {{100, -1, 10}}}},
      {"TracksDCAX", "; DCA_{x} (cm); counts", {HistType::kTH1F, {{100, -10, 10}}}},
      {"TracksDCAY", "; DCA_{y} (cm); counts", {HistType::kTH1F, {{100, -10, 10}}}},
      {"AmbiguousTracksStatus", "; Status; counts", {HistType::kTH1F, {{6, -0.5, 5.5}}}},
@@ -83,7 +80,6 @@ struct vertexingfwd {
      {"DeltaZvtx", "; #delta z (cm); counts", {HistType::kTH1F, {{400, -20, 20}}}},
      {"DeltaZvtxBest", "; #delta z = z_{best} - z_{true} (cm); counts", {HistType::kTH1F, {{400, -20, 20}}}},
      {"CorrectMatch", "; Matching value; counts", {HistType::kTH1F, {{5, -0.5, 4.5}}}},
-     {"CorrectMatch2", "; Matching value; counts", {HistType::kTH1F, {{5, -0.5, 4.5}}}},
      {"DistToOrigin", "; D (#mu m); counts", {HistType::kTH1F, {{201, -0.05, 20.05}}}},
      {"CorrectMatchDiff", "; Matching value; counts", {HistType::kTH1F, {{4, -0.5, 3.5}}}}}};
 
@@ -96,14 +92,6 @@ struct vertexingfwd {
     x1->SetBinLabel(3, "N_{ambitrack} associable");
     x1->SetBinLabel(4, "N_{ambitrack} w N_{coll} > 0");
     x1->SetBinLabel(5, "N_{ambitrack} total");
-
-    auto hstat2 = registry.get<TH1>(HIST("CorrectMatch2"));
-    auto* x3 = hstat2->GetXaxis();
-    x3->SetBinLabel(1, "# MFT tracks");
-    x3->SetBinLabel(2, "N_{ambitrack} non orphan");
-    x3->SetBinLabel(3, "N_{ambitrack} associable");
-    x3->SetBinLabel(4, "Correct match");
-    x3->SetBinLabel(5, "Incorrect match");
 
     auto hstatdiff = registry.get<TH1>(HIST("CorrectMatchDiff"));
     auto* xd = hstatdiff->GetXaxis();
@@ -286,7 +274,7 @@ struct vertexingfwd {
           registry.fill(HIST("MigrationStatus"), 2);
         } else {
           registry.fill(HIST("MigrationStatus"), 3);
-          //registry.fill(HIST("MigTracksEtaZvtx"), particle.eta(), zVtxMCAmbi);
+          registry.fill(HIST("MigTracksEtaZvtx"), particle.eta(), zVtxMCAmbi);
         }
 
         if (vecMcCollForAmb[indexMinDCA] == collisionMCID) // No migration from DCA best mcCollision
@@ -341,40 +329,12 @@ struct vertexingfwd {
 
     } // ambitracks loop
   }   // end of doProcess
-  void processStudyDCAassigned(soa::Join<aod::Collisions, aod::McCollisionLabels>::iterator const& collision, MFTTracksLabeled const& tracks, aod::McParticles const&, aod::McCollisions const&, soa::SmallGroups<soa::Join<aod::AmbiguousMFTTracks, aod::BestCollisionsFwd>> const& atracks)
-  {
-    registry.fill(HIST("CorrectMatch2"), 0, tracks.size());//all MFT tracks
-    registry.fill(HIST("CorrectMatch2"), 1, atracks.size());//ambitracks non orphans
-
-    for (auto& atrack : atracks)
-    {
-      //here collision=bestcollision
-      auto track = atrack.mfttrack_as<MFTTracksLabeled>();
-      auto particle = track.mcParticle();
-      registry.fill(HIST("bestDCAXY"), atrack.bestDCAXY());
-
-      if (atrack.bestDCAXY() > maxDCAXY){continue;}//now only "associable" atracks
-      registry.fill(HIST("CorrectMatch2"), 2);
-      //auto collision = atrack.bestCollision_as<soa::Join<aod::Collisions, aod::McCollisionLabels>>();
-      if (collision.mcCollisionId()==particle.mcCollisionId())
-      {
-        registry.fill(HIST("CorrectMatch2"), 3);
-      }
-      else
-      {
-        registry.fill(HIST("CorrectMatch2"), 4);
-        registry.fill(HIST("MigTracksEtaZvtx"), particle.eta(), particle.mcCollision().posZ());
-      }
-
-    }
-  }
-  PROCESS_SWITCH(vertexingfwd, processStudyDCAassigned, "Process ambiguous track DCA with table bestcoll", true);
 
   void processNew(aod::AmbiguousMFTTracks const& ambitracks, aod::BCs const& bcs, MFTTracksLabeled const& tracks, FullCollision const& collisions, aod::McParticles const& mcParticles, aod::McCollisions const& mcCollisions)
   {
     doProcess(ambitracks, bcs, tracks, collisions, mcParticles, mcCollisions);
   }
-  PROCESS_SWITCH(vertexingfwd, processNew, "Process ambiguous track DCA", false);
+  PROCESS_SWITCH(vertexingfwd, processNew, "Process ambiguous track DCA", true);
 
   void processOld(aod::AmbiguousTracksMFT const& ambitracks, aod::BCs const& bcs, MFTTracksLabeled const& tracks, FullCollision const& collisions, aod::McParticles const& mcParticles, aod::McCollisions const& mcCollisions)
   {
