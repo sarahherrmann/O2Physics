@@ -44,3 +44,9 @@ o2physics_add_dpl_workflow(effpt-mft
                     SOURCES effpt-mft.cxx
                     PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore
                     COMPONENT_NAME Analysis)
+
+o2physics_add_dpl_workflow(match-mft-fit
+                    SOURCES match-mft-ft0.cxx
+                    PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore
+                                          O2::ReconstructionDataFormats
+                    COMPONENT_NAME Analysis)
