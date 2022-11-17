@@ -49,4 +49,5 @@ o2physics_add_dpl_workflow(match-mft-fit
                     SOURCES match-mft-ft0.cxx
                     PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore
                                           O2::ReconstructionDataFormats
+                                          O2::DetectorsBase O2::DetectorsCommonDataFormats
                     COMPONENT_NAME Analysis)
