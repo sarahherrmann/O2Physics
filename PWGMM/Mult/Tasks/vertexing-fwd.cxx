@@ -53,6 +53,19 @@ struct vertexingfwd {
     {
       {"ParticleZR", "; #it{z}_{vtx} (cm); #it{R} (cm) ; count", {HistType::kTH2F, {ZAxis, {1001, -0.5, 100.5}}}}, //
 
+      {"Truth/DCAxTruth", "; DCA_{x}^{truth} (cm); counts", {HistType::kTH1F, {{500, -5, 5}}}},
+      {"Truth/DCAyTruth", "; DCA_{y}^{truth} (cm); counts", {HistType::kTH1F, {{500, -5, 5}}}},
+
+      {"Primary/DCAxPrimNAmb", "; DCA_{x} (cm); counts", {HistType::kTH1F, {{500, -5, 5}}}},
+      {"Primary/DCAyPrimNAmb", "; DCA_{y} (cm); counts", {HistType::kTH1F, {{500, -5, 5}}}},
+      {"Primary/DCAxPtPrimNAmb", "; DCA_{x} (cm); #it{p}_{T}^{true} (GeV/#it{c}) ; counts", {HistType::kTH2F, {{2500, -5, 5}, {21, -0.05, 10.05}}}},
+
+      {"Primary/DCAxPrimAmb1", "; DCA_{x} (cm); counts", {HistType::kTH1F, {{500, -5, 5}}}},
+      {"Primary/DCAyPrimAmb1", "; DCA_{y} (cm); counts", {HistType::kTH1F, {{500, -5, 5}}}},
+
+      {"Primary/DCAxPrimAmb2", "; DCA_{x} (cm); counts", {HistType::kTH1F, {{500, -5, 5}}}},
+      {"Primary/DCAyPrimAmb2", "; DCA_{y} (cm); counts", {HistType::kTH1F, {{500, -5, 5}}}},
+
       {"TracksDCAXY", "; DCA_{xy} (cm); counts", {HistType::kTH1F, {{100, -1, 10}}}},
       {"DeltaDCAXY", "; DCA_{xy}^{reco}-DCA_{xy}^{truth} (cm); counts", {HistType::kTH1F, {{500, -5, 5}}}},
       {"DeltaDCAXYAll", "; DCA_{xy}^{reco}-DCA_{xy}^{truth} (cm); counts", {HistType::kTH1F, {{500, -5, 5}}}},
@@ -191,13 +204,17 @@ struct vertexingfwd {
       const auto dcaYtruth(particle.vy() - particle.mcCollision().posY());
       auto dcaXYtruth = std::sqrt(dcaXtruth * dcaXtruth + dcaYtruth * dcaYtruth);//this is DCA_xy truth
 
-      float Rv = std::sqrt(pow(particle.vx(),2)+pow(particle.vy(),2));
-      registry.fill(HIST("ParticleZR"), particle.vz(), Rv);
-
 
       registry.fill(HIST("DeltaDCAXY"), bestDCA-dcaXYtruth);
       registry.fill(HIST("DeltaDCAX"), bestDCAX-dcaXtruth);
       registry.fill(HIST("DeltaDCAY"), bestDCAY-dcaYtruth);
+
+      if (particle.isPhysicalPrimary())
+      {
+        registry.fill(HIST("Primary/DCAxPrimAmb2"), bestDCAX);
+        registry.fill(HIST("Primary/DCAyPrimAmb2"), bestDCAY);
+      }
+
       if (particle.mcCollisionId()==bestMCCol)
       {
         //good reassociation
@@ -252,9 +269,16 @@ void processDCA(MFTTracksLabeled const& tracks,
     const auto dcaY(trackPar.getY() - collision.posY());
     dcaXY = std::sqrt(dcaX * dcaX + dcaY * dcaY);
 
+    float Rv = std::sqrt(pow(particle.vx(),2)+pow(particle.vy(),2));
+    registry.fill(HIST("ParticleZR"), particle.vz(), Rv);
+
     const auto dcaXtruth(particle.vx() - particle.mcCollision().posX());
     const auto dcaYtruth(particle.vy() - particle.mcCollision().posY());
     auto dcaXYtruth = std::sqrt(dcaXtruth * dcaXtruth + dcaYtruth * dcaYtruth);//this is DCA_xy truth
+
+
+    registry.fill(HIST("Truth/DCAxTruth"), dcaXtruth);
+    registry.fill(HIST("Truth/DCAyTruth"), dcaYtruth);
 
     registry.fill(HIST("DeltaDCAXYAll"), dcaXY-dcaXYtruth);
     registry.fill(HIST("DeltaDCAXAll"), dcaX-dcaXtruth);
@@ -264,11 +288,28 @@ void processDCA(MFTTracksLabeled const& tracks,
       registry.fill(HIST("DeltaDCAXYAmb"), dcaXY-dcaXYtruth);
       registry.fill(HIST("DeltaDCAXAmb"), dcaX-dcaXtruth);
       registry.fill(HIST("DeltaDCAYAmb"), dcaY-dcaYtruth);
+      if (particle.isPhysicalPrimary())
+      {
+        registry.fill(HIST("Primary/DCAxPrimAmb1"), dcaX);
+        registry.fill(HIST("Primary/DCAyPrimAmb1"), dcaY);
+      }
+
+
       continue; // this track has already been reassigned to bestcollision, don't double count
     }
     registry.fill(HIST("DeltaDCAXYNAmb"), dcaXY-dcaXYtruth);
     registry.fill(HIST("DeltaDCAXNAmb"), dcaX-dcaXtruth);
     registry.fill(HIST("DeltaDCAYNAmb"), dcaY-dcaYtruth);
+
+    if (!particle.isPhysicalPrimary()) {
+      continue;
+    }
+    //only tracks coming from primary particles here
+    //non ambiguous tracks
+    registry.fill(HIST("Primary/DCAxPrimNAmb"), dcaX);
+    registry.fill(HIST("Primary/DCAyPrimNAmb"), dcaY);
+
+    registry.fill(HIST("Primary/DCAxPtPrimNAmb"), dcaX, particle.pt());
 
   }
 }

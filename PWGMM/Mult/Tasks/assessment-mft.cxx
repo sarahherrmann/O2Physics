@@ -33,6 +33,7 @@ struct AssessmentMFT {
   {
     for (auto& track : tracks) {
       float phi = track.phi();
+      auto collision = track.collision();
       o2::math_utils::bringTo02Pi(phi);
       registry.fill(HIST("TracksPhiEta"), phi, track.eta());
 
