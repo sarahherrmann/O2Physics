@@ -427,7 +427,9 @@ struct PseudorapidityDensityMFT {
         }
 
         registry.fill(HIST("Tracks/Centrality/EtaZvtx"), track.eta(), z, c);
-        registry.fill(HIST("Tracks/Centrality/PhiEta"), track.phi(), track.eta(), c);
+        float phi = track.phi();
+        o2::math_utils::bringTo02Pi(phi);
+        registry.fill(HIST("Tracks/Centrality/PhiEta"), phi, track.eta(), c);
       }
 
     } else {
