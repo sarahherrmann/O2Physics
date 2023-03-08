@@ -121,6 +121,7 @@ T getCompatibleBCs(aod::AmbiguousMFTTrack const& atrack, T const& bcs, int delta
   int moveCount = 0; // optimize to avoid to re-create the iterator
   printf("maxBCId before %lld\n", maxBCId);
   auto bcPrev = bcLast;
+  bool test = false;
 
   while (bcLast != bcs.end() && bcLast.globalBC() <= lastBC + deltaBC && bcLast.globalBC() >= firstBC + deltaBC) {
     //LOGF(debug, "Table id %d BC %llu", bcLast.globalIndex(), bcLast.globalBC()); creates yet another seg fault
@@ -128,14 +129,18 @@ T getCompatibleBCs(aod::AmbiguousMFTTrack const& atrack, T const& bcs, int delta
     // {
     //   printf("Table id %lld BC %llu\n", bcLast.globalIndex(), bcLast.globalBC()); //doesn't create a segfault
     // }
-
+    test = true;
     maxBCId = bcLast.globalIndex();
     maxGlobalBC = bcLast.globalBC();
     bcPrev = bcLast;
     ++bcLast;
     ++moveCount;
   }
-  printf("the condition failed for bcLast.globalBC() = %lld\n", bcLast.globalBC());
+  //printf("the condition failed for bcLast.globalBC() = %lld\n", bcLast.globalBC());
+  if (!test)
+  {
+    printf("I did not enter the while loop %d\n", 1);
+  }
 
   bcLast.moveByIndex(-moveCount); // Move back to original position
   int64_t minBCId = bcIter.bcId();//if deltaBC>0 !
