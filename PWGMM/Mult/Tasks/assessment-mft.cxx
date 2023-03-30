@@ -30,12 +30,14 @@ struct AssessmentMFT {
     "registry",
     {
 
-      {"TracksPhiEta", "; #varphi; #eta; tracks", {HistType::kTH2F, {{600, 0, 2 * M_PI}, {100, -8, 8}}}},  //
+      {"TracksPhiEta", "; #varphi; #eta; tracks", {HistType::kTH2F, {{600, 0, 2 * M_PI}, {100, -8, 8}}}}, //
       {"TracksChi2Eta", "; #chi^{2}; #it{#eta}; tracks", {HistType::kTH2F, {{600, 0, 20}, {100, -8, 8}}}}, //
-      {"TracksChi2", "; #chi^{2}; tracks", {HistType::kTH1F, {{600, 0, 20}}}},                             //
-      {"TracksNclustersEta", "; nClusters; #eta; tracks", {HistType::kTH2F, {{7, 4, 10}, {100, -8, 8}}}},  //
-      {"TracksTime", "; time; #count", {HistType::kTH1D, {{6000000, 0, 60000}}}},                          //
-    }                                                                                                      //
+      {"TracksChi2", "; #chi^{2}; tracks", {HistType::kTH1F, {{600, 0, 20}}}}, //
+      {"TracksChi2OverNdf", "; #chi^{2}/ndf; tracks", {HistType::kTH1F, {{600, 0, 20}}}}, //
+      {"TracksChi2QC", "; #chi^{2}; tracks", {HistType::kTH1F, {{21, -0.5, 20.5}}}}, //
+      {"TracksNclustersEta", "; nClusters; #eta; tracks", {HistType::kTH2F, {{7, 4, 10}, {100, -8, 8}}}}, //
+      {"TracksTime", "; time; #count", {HistType::kTH1D, {{6000000, 0, 60000}}}},                            //
+    }                                                                                                        //
   };
 
   void process(aod::Collisions::iterator const& collision, aod::MFTTracks const& tracks, aod::BCs const& bcs)
@@ -47,15 +49,20 @@ struct AssessmentMFT {
 
       registry.fill(HIST("TracksChi2Eta"), track.chi2(), track.eta());
       registry.fill(HIST("TracksChi2"), track.chi2());
+      registry.fill(HIST("TracksChi2QC"), track.chi2());
+      int ndf = 2*track.nClusters()-5;
+      registry.fill(HIST("TracksChi2OverNdf"), track.chi2() / ndf);
       registry.fill(HIST("TracksNclustersEta"), track.nClusters(), track.eta());
 
       auto collisionBCID = collision.bcId();
       auto collisionBC = (bcs.iteratorAt(collisionBCID)).globalBC();
 
       double seconds = (collisionBC * o2::constants::lhc::LHCBunchSpacingNS + track.trackTime()) / 1e9;
-      // this is in s
+      //this is in s
       registry.fill(HIST("TracksTime"), seconds);
+
     }
+
   }
 };
 

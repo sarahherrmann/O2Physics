@@ -77,89 +77,80 @@ struct bctoft0c {
 using ExtBCs = soa::Join<aod::BCs, aod::Timestamps, aod::MatchedToFT0>;
 
 template <typename T>
-T getCompatibleBCs(aod::AmbiguousMFTTrack const& atrack, T const& bcs, int deltaBC)
+T getCompatibleBCs(aod::AmbiguousMFTTrack const& atrack, aod::Collision const& collOrig, T const& bcs, int deltaBC)
 {
-  //auto bcIter = collision.bc_as<T>();
+
   auto compBCs = atrack.bc_as<T>();//BC + info on FT0
   auto bcIter = compBCs.begin();//first element of compBC
-  //auto bcLast = compBCs.last();
-  // due to the MFT time error the first element of compBC may not be the real one
-  // uint64_t mostProbableBC = bcIter.globalBC();
-  // uint64_t meanBC = mostProbableBC - std::lround(collision.collisionTime() / (o2::constants::lhc::LHCBunchSpacingNS / 1000));
-  // int deltaBC = std::ceil(collision.collisionTimeRes() / (o2::constants::lhc::LHCBunchSpacingNS / 1000) * 4);
-
-  //auto bcLast = typename T::iterator();//iterates too many times on 1 BCglobalindex
-  auto bcLast = ExtBCs::iterator();
-  for (auto& bc : compBCs)
-  {
-    bcLast=bc;
-    //LOGF(info, "compBCs %llu", bc.globalBC()); //causes a SEG FAULT for some reason ??
-    printf("compBCs %llu\n", bc.globalBC()); //this doesn't
-  }
   uint64_t firstBC = bcIter.globalBC();
-  uint64_t lastBC = bcLast.globalBC();
 
-  //LOGF(info, "BC range: %llu - %llu", firstBC + deltaBC, lastBC + deltaBC);
-  printf("-------- BC range: %llu - %llu\n", firstBC + deltaBC, lastBC + deltaBC);
-
-  // if (deltaBC > 0)
-  // {
-  //   printf("deltaBC > 0 %d\n", 1);
-  //   //bcIter.moveByIndex(compBCs.size()-1);
-  //   printf("deltaBC > 0 %d\n", 2);
-  //   //bcIter = compBCs.end();//bcIter needs to be inside the range, and deltaBC=1 of >0 minimum
-  //   //--bcIter;
-  //   //means that the next BC will be in the range ? not necesseraly, so get the previous
-  // }
-  //else if deltaBC<0, bcIter = compBCs.begin() is inside the range
+  bcIter.moveToEnd();//does it move to the end or the next one after the end ?
+  --bcIter;//to avoid a seg fault
+  uint64_t lastBC = bcIter.globalBC();//gives the last COMPATIBLE BC in compBCs
 
 
-  // find slice of BCs table with BC in [firstBC + deltaBC, lastBC + deltaBC]
+  auto bcIt = collOrig.bc_as<T>();
 
-  int64_t maxBCId = bcLast.globalIndex();//not the problem
-  auto maxGlobalBC = bcLast.globalBC();
-  int moveCount = 0; // optimize to avoid to re-create the iterator
-  printf("maxBCId before %lld\n", maxBCId);
-  auto bcPrev = bcLast;
-  bool test = false;
 
-  while (bcLast != bcs.end() && bcLast.globalBC() <= lastBC + deltaBC && bcLast.globalBC() >= firstBC + deltaBC) {
-    //LOGF(debug, "Table id %d BC %llu", bcLast.globalIndex(), bcLast.globalBC()); creates yet another seg fault
-    // if(bcLast.globalIndex() != bcPrev.globalIndex())
-    // {
-    //   printf("Table id %lld BC %llu\n", bcLast.globalIndex(), bcLast.globalBC()); //doesn't create a segfault
-    // }
-    test = true;
-    maxBCId = bcLast.globalIndex();
-    maxGlobalBC = bcLast.globalBC();
-    bcPrev = bcLast;
-    ++bcLast;
-    ++moveCount;
-  }
-  //printf("the condition failed for bcLast.globalBC() = %lld\n", bcLast.globalBC());
-  if (!test)
+  int64_t minBCId = bcIt.globalIndex();
+  auto minGlobalBC = bcIt.globalBC();
+
+
+  if (bcIt.globalBC() < firstBC + deltaBC)
   {
-    printf("I did not enter the while loop %d\n", 1);
+    while (bcIt != bcs.end() && bcIt.globalBC() < firstBC + deltaBC)
+    {
+      minBCId = bcIt.globalIndex();
+      minGlobalBC = bcIt.globalBC();
+
+      ++bcIt;
+    }
+    if (bcIt == bcs.end())
+    {
+      --bcIt;
+      minBCId = bcIt.globalIndex();
+      minGlobalBC = bcIt.globalBC();
+    }
+  }
+  else
+  {
+    //here bcIt.globalBC() >= firstBC + deltaBC
+
+    while (bcIt != bcs.begin() && bcIt.globalBC() > firstBC + deltaBC)
+    {
+      minBCId = bcIt.globalIndex();
+      minGlobalBC = bcIt.globalBC();
+
+      --bcIt;
+    }
   }
 
-  bcLast.moveByIndex(-moveCount); // Move back to original position
-  int64_t minBCId = bcIter.bcId();//if deltaBC>0 !
-  auto minGlobalBC = bcIter.globalBC();
-  printf("minBCId before %lld\n", minBCId);
-  while (bcLast != bcs.begin() && bcLast.globalBC() <= lastBC + deltaBC && bcLast.globalBC() >= firstBC + deltaBC) {
-    //printf("Table id %d BC %llu\n", bcLast.globalIndex(), bcLast.globalBC());
-    minBCId = bcLast.globalIndex();
-    minGlobalBC = bcLast.globalBC();
-    --bcLast;
+  int64_t maxBCId = bcIt.globalIndex();
+  auto maxGlobalBC = bcIt.globalBC();
+
+  while (bcIt != bcs.end() && bcIt.globalBC() < lastBC + deltaBC)
+  {
+    maxBCId = bcIt.globalIndex();
+    maxGlobalBC = bcIt.globalBC();
+
+    ++bcIt;
   }
 
-  printf("Will consider BC entries from %lld to %lld\n", minBCId, maxBCId);
-  printf("Give a global BC range from %lld to %lld\n", minGlobalBC, maxGlobalBC);
+  if (bcIt != bcs.end() && maxBCId >= minBCId)
+  {
+    T slice{{bcs.asArrowTable()->Slice(minBCId, maxBCId - minBCId + 1)}, (uint64_t)minBCId};
+    bcs.copyIndexBindings(slice);
+    return slice;
+  }
+  else
+  {
+    T slice{{bcs.asArrowTable()->Slice(minBCId, maxBCId - minBCId)}, (uint64_t)minBCId};
+    bcs.copyIndexBindings(slice);
+    return slice;
+  }
 
-  T slice{{bcs.asArrowTable()->Slice(minBCId, maxBCId - minBCId + 1)}, (uint64_t)minBCId};
-  bcs.copyIndexBindings(slice);
-  return slice;
 }
+
 
 
 using MFTTracksLabeled = soa::Join<o2::aod::MFTTracks, aod::McMFTTrackLabels>;
@@ -174,7 +165,10 @@ struct matchmftfit {
   int runNumber = -1;
   float Bz = 0;                                         // Magnetic field for MFT
   static constexpr double centerMFT[3] = {0, 0, -61.4}; // Field at center of MFT
+  int count = 0;
   o2::parameters::GRPMagField* grpmag = nullptr;
+
+  Configurable<int> shiftBC{"shiftBC", 0, "shift in BC wrt normal"};
 
   Configurable<std::string> ccdburl{"ccdb-url", "http://alice-ccdb.cern.ch", "url of the ccdb repository"};
   Configurable<std::string> geoPath{"geoPath", "GLO/Config/GeometryAligned", "Path of the geometry file"};
@@ -229,7 +223,7 @@ struct matchmftfit {
   }
 
 
-  void process(aod::MFTTracks const&,
+  void processAmbi(aod::MFTTracks const& mfttracks,
                aod::Collisions const&, ExtBCs const& bcs,
                aod::FT0s const&,
                aod::AmbiguousMFTTracks const& atracks)
@@ -249,6 +243,8 @@ struct matchmftfit {
     double minD;
     double globalMinD;
 
+
+
     for (auto& atrack : atracks)
     {
       globalMinD=999.;//minimum D for all BC
@@ -256,10 +252,16 @@ struct matchmftfit {
       //beware: there could be several BC with the same smallest D
 
       auto compatibleBCs = atrack.bc_as<ExtBCs>();//BC + info on FT0
-      auto bcSlice= getCompatibleBCs(atrack,bcs,50);
-      //auto track = atrack.mfttrack();
-      //printf("------------------------------mfttrackId %d\n", atrack.mfttrackId());
+
+
       auto track = atrack.mfttrack();
+
+      if (!track.has_collision())
+      {
+        continue;
+      }
+      auto collOrig = track.collision();
+      auto bcSlice = getCompatibleBCs(atrack, collOrig, bcs, shiftBC);
 
 
       std::vector<double> v1; // Temporary null vector for the computation of the covariance matrix
@@ -285,7 +287,7 @@ struct matchmftfit {
       std::vector<ExtBCs::iterator> goodBC;
       int nCompBCwft0 = 0;
       bool hasft0 = false;
-      for (auto& bc : compatibleBCs)
+      for (auto& bc : bcSlice)
       {
         hasft0 = false;
         //printf("----------bcId %lld\n", bc.globalIndex());
@@ -346,7 +348,237 @@ struct matchmftfit {
       registry.fill(HIST("NCompBCwFT0"), nCompBCwft0);
     }
     n++;//counter for visualisation
+
+
+    //loop on mfttracks
+    for (auto& mfttrack : mfttracks)
+    {
+      globalMinD=999.;//minimum D for all BC
+      ExtBCs::iterator possibleBC;//compatible BC with the D the smallest
+      //beware: there could be several BC with the same smallest D
+
+
+
+
+      if (!track.has_collision())
+      {
+        continue;
+      }
+      auto collOrig = track.collision();
+      auto bcSlice = getCompatibleBCs(mfttrack, collOrig, bcs, shiftBC);//change the function
+
+
+      std::vector<double> v1; // Temporary null vector for the computation of the covariance matrix
+      SMatrix55 tcovs(v1.begin(), v1.end());
+      SMatrix5 tpars(mfttrack.x(), mfttrack.y(), mfttrack.phi(), mfttrack.tgl(), mfttrack.signed1Pt());
+
+      o2::track::TrackParCovFwd trackPar{mfttrack.z(), tpars, tcovs, mfttrack.chi2()};
+
+
+      //we propagate the MFT track to the mean z position of FT0-C
+      //trackPar.propagateToZlinear(-82.6);//in cm
+      //getTrackPar() doesn't work because mft tracks don't have alpha
+      trackPar.propagateToZhelix(-82.6, Bz);
+
+
+      if ((abs(trackPar.getX())<6.365) && (abs(trackPar.getY())<6.555))
+      {
+        //track outside the FT0-C acceptance (in the central hole)
+        continue;
+      }
+
+
+      std::vector<ExtBCs::iterator> goodBC;
+      int nCompBCwft0 = 0;
+      bool hasft0 = false;
+      for (auto& bc : bcSlice)
+      {
+        hasft0 = false;
+        //printf("----------bcId %lld\n", bc.globalIndex());
+          if (!bc.has_ft0s())
+          {
+            continue;
+          }
+
+          auto ft0s = bc.ft0s();
+          i=0;//reinitialise
+          D=0.0;
+          minD=999.9;
+          for (auto const& ft0 : ft0s)
+          {
+            //printf("---------ft0.bcId %d\n", ft0.bcId());
+            if (ft0.channelC().size()>=1)
+            {
+              hasft0=true;
+            }
+            for (auto channelId : ft0.channelC())
+            {
+
+              std::vector<float> Xc = channelCoord[channelId];//(xc,yc,zc) coordinates
+              //D in cm
+              D=sqrt(pow(Xc[0]*0.1-trackPar.getX(),2)+pow(Xc[1]*0.1-trackPar.getY(),2)+pow(Xc[2]*0.1-1.87-trackPar.getZ(),2));
+              //printf("----channelId %u, D %f, n %d\n", channelId, D, n);//should be between 96 and 207
+              if (D < minD)
+              {
+                minD=D;
+              }
+
+              registry.fill(HIST("DistChannelToProp"), D);
+
+            }
+
+
+            i+=ft0.channelC().size();
+          }
+          if (minD < 2)//20 mm
+          {
+            goodBC.push_back(bc);//goodBC is a vector of bc
+          }
+          if (minD < globalMinD)
+          {
+            globalMinD=minD;
+            possibleBC=bc;
+          }
+
+          registry.fill(HIST("NchannelsPerBC"), i);
+          if (hasft0)
+          {
+            nCompBCwft0++;//number of compatible BCs that have ft0 signal
+          }
+
+      }
+      registry.fill(HIST("NgoodBCperTrack"), goodBC.size());
+
+      registry.fill(HIST("NCompBCwFT0"), nCompBCwft0);
+    }//end of loop on mfttracks
   }
+  PROCESS_SWITCH(matchmftfit, processAmbi, "Process only ambiguous tracks", false);
+
+  void processAll(aod::MFTTracks const& mfttracks,
+               aod::Collisions const&, ExtBCs const& bcs,
+               aod::FT0s const&)
+  {
+    if (bcs.size() == 0) {
+      return;
+    }
+    if (mfttracks.size() == 0) {
+      LOG(info) << "The MFT track table is empty";
+      return;
+    }
+    initCCDB(bcs.begin());
+
+    int i=0;//counts the number of channels having non-zero amplitude
+    //for a particular BC
+    double D = 0.0; //distance between (xe,ye,ze) and (xc,yc,zc)
+    double minD;
+    double globalMinD;
+
+    n++;//counter for visualisation
+
+
+    //loop on mfttracks
+    for (auto& mfttrack : mfttracks)
+    {
+      globalMinD=999.;//minimum D for all BC
+      ExtBCs::iterator possibleBC;//compatible BC with the D the smallest
+      //beware: there could be several BC with the same smallest D
+
+
+
+
+      if (!track.has_collision())
+      {
+        continue;
+      }
+      auto collOrig = mfttrack.collision();
+      auto bcSlice = getCompatibleBCs(mfttrack, collOrig, bcs, shiftBC);//change the function
+
+
+      std::vector<double> v1; // Temporary null vector for the computation of the covariance matrix
+      SMatrix55 tcovs(v1.begin(), v1.end());
+      SMatrix5 tpars(mfttrack.x(), mfttrack.y(), mfttrack.phi(), mfttrack.tgl(), mfttrack.signed1Pt());
+
+      o2::track::TrackParCovFwd trackPar{mfttrack.z(), tpars, tcovs, mfttrack.chi2()};
+
+
+      //we propagate the MFT track to the mean z position of FT0-C
+      //trackPar.propagateToZlinear(-82.6);//in cm
+      //getTrackPar() doesn't work because mft tracks don't have alpha
+      trackPar.propagateToZhelix(-82.6, Bz);
+
+
+      if ((abs(trackPar.getX())<6.365) && (abs(trackPar.getY())<6.555))
+      {
+        //track outside the FT0-C acceptance (in the central hole)
+        continue;
+      }
+
+
+      std::vector<ExtBCs::iterator> goodBC;
+      int nCompBCwft0 = 0;
+      bool hasft0 = false;
+      for (auto& bc : bcSlice)
+      {
+        hasft0 = false;
+        //printf("----------bcId %lld\n", bc.globalIndex());
+          if (!bc.has_ft0s())
+          {
+            continue;
+          }
+
+          auto ft0s = bc.ft0s();
+          i=0;//reinitialise
+          D=0.0;
+          minD=999.9;
+          for (auto const& ft0 : ft0s)
+          {
+            //printf("---------ft0.bcId %d\n", ft0.bcId());
+            if (ft0.channelC().size()>=1)
+            {
+              hasft0=true;
+            }
+            for (auto channelId : ft0.channelC())
+            {
+
+              std::vector<float> Xc = channelCoord[channelId];//(xc,yc,zc) coordinates
+              //D in cm
+              D=sqrt(pow(Xc[0]*0.1-trackPar.getX(),2)+pow(Xc[1]*0.1-trackPar.getY(),2)+pow(Xc[2]*0.1-1.87-trackPar.getZ(),2));
+              //printf("----channelId %u, D %f, n %d\n", channelId, D, n);//should be between 96 and 207
+              if (D < minD)
+              {
+                minD=D;
+              }
+
+              registry.fill(HIST("DistChannelToProp"), D);
+
+            }
+
+
+            i+=ft0.channelC().size();
+          }
+          if (minD < 2)//20 mm
+          {
+            goodBC.push_back(bc);//goodBC is a vector of bc
+          }
+          if (minD < globalMinD)
+          {
+            globalMinD=minD;
+            possibleBC=bc;
+          }
+
+          registry.fill(HIST("NchannelsPerBC"), i);
+          if (hasft0)
+          {
+            nCompBCwft0++;//number of compatible BCs that have ft0 signal
+          }
+
+      }
+      registry.fill(HIST("NgoodBCperTrack"), goodBC.size());
+
+      registry.fill(HIST("NCompBCwFT0"), nCompBCwft0);
+    }//end of loop on mfttracks
+  }
+  PROCESS_SWITCH(matchmftfit, processAll, "Process all MFT tracks", true);
 
 
 };
