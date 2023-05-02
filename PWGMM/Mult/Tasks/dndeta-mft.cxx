@@ -456,6 +456,7 @@ struct PseudorapidityDensityMFT {
     auto perCollisionMCSample = mcSample->sliceByCached(aod::mcparticle::mcCollisionId, mcCollision.globalIndex());
     auto nCharged = 0;
     for (auto& particle : perCollisionMCSample) {
+
       auto charge = 0.;
       auto p = pdg->GetParticle(particle.pdgCode());
       if (p != nullptr) {
@@ -529,6 +530,8 @@ struct PseudorapidityDensityMFT {
 
     for (auto& particle : particles) {
       auto p = pdg->GetParticle(particle.pdgCode());
+
+      //printf("--------I have a particle %d\n", particle.pdgCode());
       auto charge = 0;
       if (p != nullptr) {
         charge = static_cast<int>(p->Charge());
