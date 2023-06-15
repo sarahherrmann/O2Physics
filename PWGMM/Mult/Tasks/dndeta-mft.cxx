@@ -97,7 +97,7 @@ struct PseudorapidityDensityMFT {
       {"TracksPhiZvtx", "; #varphi; #it{z}_{vtx} (cm); tracks", {HistType::kTH2F, {PhiAxis, ZAxis}}},   //
       {"TracksPtEta", " ; p_{T} (GeV/c); #eta", {HistType::kTH2F, {PtAxis, EtaAxis}}},                  //
       {"EventSelection", ";status;events", {HistType::kTH1F, {{7, 0.5, 7.5}}}},                         //
-
+      {"Tracks/Control/TrackAmbDegree", " ; N_{coll}^{comp}", {HistType::kTH1F, {{21,-0.5,20.5}}}},
       {"Tracks/Control/DCAXY", " ; DCA_{XY} (cm)", {HistType::kTH1F, {DCAxyAxis}}},                                                    //
                                                                                                                                        //{"Tracks/Control/DCAZPt", " ; p_{T} (GeV/c) ; DCA_{Z} (cm)", {HistType::kTH2F, {PtAxis, DCAAxis}}},                     //
       {"Tracks/Control/ReassignedDCAXY", "  ; DCA_{XY} (cm)", {HistType::kTH1F, {DCAxyAxis}}},                                         //
@@ -156,20 +156,7 @@ struct PseudorapidityDensityMFT {
       x->SetBinLabel(4, "Selected");
       x->SetBinLabel(5, "Selected INEL>0");
     }
-    if (doprocessMultReweight) {
-      ccdb->setURL(url.value);
-      // Enabling object caching, otherwise each call goes to the CCDB server
-      ccdb->setCaching(true);
-      ccdb->setLocalObjectValidityChecking();
-      // Not later than now, will be replaced by the value of the train creation
-      // This avoids that users can replace objects **while** a train is running
-      ccdb->setCreatedNotAfter(nolaterthan.value);
-      LOGF(info, "Getting object %s", path.value.data());
-      histoReweight = ccdb->getForTimeStamp<TH1D>(path.value, nolaterthan.value);
-      if (!histoReweight) {
-        LOGF(fatal, "object not found!");
-      }
-    }
+
     if (doprocessCountingCentrality) {
       registry.add({"Events/Centrality/Selection", ";status;centrality;events", {HistType::kTH2F, {{3, 0.5, 3.5}, CentAxis}}});
       auto hstat = registry.get<TH2>(HIST("Events/Centrality/Selection"));
@@ -226,8 +213,8 @@ struct PseudorapidityDensityMFT {
 
   Partition<aod::MFTTracks> sample = (aod::fwdtrack::eta < -2.8f) && (aod::fwdtrack::eta > -3.2f);
   expressions::Filter atrackFilter = (aod::fwdtrack::bestCollisionId >= 0) &&
-                                     (aod::fwdtrack::etas < -2.0f) &&
-                                     (aod::fwdtrack::etas > -3.9f) &&
+                                     (aod::fwdtrack::eta < -2.0f) &&
+                                     (aod::fwdtrack::eta > -3.9f) &&
                                      (nabs(aod::fwdtrack::bestDCAXY) <= 2.f);
 
   using CollwEv = soa::Join<aod::Collisions, aod::EvSels>;
@@ -292,16 +279,18 @@ struct PseudorapidityDensityMFT {
           // registry.fill(HIST("Tracks/Control/ReassignedDCAZPt"), otrack.pt(), track.bestDCAZ());
         }
         registry.fill(HIST("Tracks/Control/DCAXY"), track.bestDCAXY());
-        registry.fill(HIST("TracksEtaZvtx"), track.etas(), z);
+        registry.fill(HIST("TracksEtaZvtx"), otrack.eta(), z);
         if (midtracks.size() > 0) // INEL>0
         {
-          registry.fill(HIST("Tracks/EtaZvtx_gt0"), track.etas(), z);
+          registry.fill(HIST("Tracks/EtaZvtx_gt0"), otrack.eta(), z);
         }
-        float phi = track.phis();
+        float phi = otrack.phi();
         o2::math_utils::bringTo02Pi(phi);
-        registry.fill(HIST("TracksPhiEta"), phi, track.etas());
+        registry.fill(HIST("TracksPhiEta"), phi, otrack.eta());
         registry.fill(HIST("TracksPhiZvtx"), phi, z);
-        registry.fill(HIST("TracksPtEta"), track.pts(), track.etas());
+        registry.fill(HIST("TracksPtEta"), otrack.pt(), otrack.eta());
+
+        registry.fill(HIST("Tracks/Control/TrackAmbDegree"), track.ambDegree());
       }
 
       for (auto& track : tracks) {
@@ -332,58 +321,6 @@ struct PseudorapidityDensityMFT {
     }
   }
   PROCESS_SWITCH(PseudorapidityDensityMFT, processMult, "Process reco or data info", true);
-
-  void processMultReweight(soa::Join<aod::Collisions, aod::EvSels>::iterator const& collision, aod::MFTTracks const& tracks, soa::SmallGroups<soa::Join<aod::AmbiguousMFTTracks, aod::BestCollisionsFwd>> const& atracks)
-  {
-
-    if (!doprocessGen) {
-      LOGP(debug, "You can't enable processMultReweight if not analysing MC");
-      return;
-    }
-    if (tracks.size() == 0) {
-      return;
-    }
-    registry.fill(HIST("EventSelection"), 1.);
-    if (!useEvSel || (useEvSel && collision.sel8())) {
-      registry.fill(HIST("EventSelection"), 2.);
-      auto z = collision.posZ();
-      auto perCollisionSample = sample->sliceByCached(o2::aod::fwdtrack::collisionId, collision.globalIndex(), cache);
-      auto Ntrk = perCollisionSample.size() + atracks.size();
-      float weight = 1.;
-      weight = histoReweight->GetBinContent(histoReweight->FindBin(z));
-
-      registry.fill(HIST("EventsNtrkZvtx"), Ntrk, z, weight);
-      for (auto& track : atracks) {
-
-        float phi = track.phis();
-        o2::math_utils::bringTo02Pi(phi);
-
-        weight = 1.; // change this !
-        registry.fill(HIST("TracksEtaZvtx"), track.etas(), z, weight);
-        registry.fill(HIST("TracksPhiEta"), phi, track.etas(), weight);
-        registry.fill(HIST("TracksPhiZvtx"), phi, z, weight);
-        registry.fill(HIST("TracksPtEta"), track.pts(), track.etas(), weight);
-      }
-
-      for (auto& track : tracks) {
-        if (find(ambTrackIds.begin(), ambTrackIds.end(), track.globalIndex()) != ambTrackIds.end()) {
-          continue; // this track has already been reassigned to bestcollision, don't double count
-        }
-        float phi = track.phi();
-        o2::math_utils::bringTo02Pi(phi);
-        registry.fill(HIST("TracksEtaZvtx"), track.eta(), z, weight);
-        registry.fill(HIST("TracksPhiEta"), phi, track.eta(), weight);
-        registry.fill(HIST("TracksPtEta"), track.pt(), track.eta(), weight);
-        if ((track.eta() < -2.0f) && (track.eta() > -3.9f)) {
-          registry.fill(HIST("TracksPhiZvtx"), phi, z, weight);
-        }
-      }
-
-    } else {
-      registry.fill(HIST("EventSelection"), 4.);
-    }
-  }
-  PROCESS_SWITCH(PseudorapidityDensityMFT, processMultReweight, "Process reco info w reweight", false);
 
   using ExColsCent = soa::Join<aod::Collisions, aod::CentFT0Cs, aod::EvSels>;
 

@@ -28,15 +28,21 @@ DECLARE_SOA_COLUMN(PhiStatic, phis, float);
 namespace fwdtrack
 {
 DECLARE_SOA_INDEX_COLUMN_FULL(BestCollision, bestCollision, int32_t, Collisions, "");
+DECLARE_SOA_COLUMN(AmbDegree, ambDegree, int);// degree of ambiguity of the track
 DECLARE_SOA_COLUMN(BestDCAXY, bestDCAXY, float);
+DECLARE_SOA_COLUMN(BestDCAX, bestDCAX, float);
+DECLARE_SOA_COLUMN(BestDCAY, bestDCAY, float);
 DECLARE_SOA_COLUMN(PtStatic, pts, float);
 DECLARE_SOA_COLUMN(PStatic, ps, float);
 DECLARE_SOA_COLUMN(EtaStatic, etas, float);
 DECLARE_SOA_COLUMN(PhiStatic, phis, float);
 } // namespace fwdtrack
 
-DECLARE_SOA_TABLE(BestCollisionsFwd, "AOD", "BESTCOLLFWD",
+DECLARE_SOA_TABLE(BestCollisionsFwd, "AOD", "BESTCOLLFWD", aod::fwdtrack::AmbDegree,
                   aod::fwdtrack::BestCollisionId, aod::fwdtrack::BestDCAXY,
+                  fwdtrack::BestDCAX, fwdtrack::BestDCAY);//beware: depending on which process produced this table,
+                  //it can be joined with either MFTAmbiguousTracks OR MFTTracks
+DECLARE_SOA_TABLE(BestCollFwdExtra, "AOD", "BESTCOLLFWDE",
                   fwdtrack::X, fwdtrack::Y,
                   fwdtrack::Z, fwdtrack::Tgl, fwdtrack::Signed1Pt,
                   fwdtrack::PtStatic, fwdtrack::PStatic, fwdtrack::EtaStatic,
