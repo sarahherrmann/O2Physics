@@ -61,10 +61,13 @@ static constexpr TrackSelectionFlags::flagtype trackSelectionDCA =
   TrackSelectionFlags::kDCAz | TrackSelectionFlags::kDCAxy;
 
 using MFTTracksLabeled = soa::Join<o2::aod::MFTTracks, aod::McMFTTrackLabels>;
+using MFTTracksWColls = soa::Join<o2::aod::MFTTracks, aod::BestCollisionsFwd>;
 
 struct PseudorapidityDensityMFT {
   SliceCache cache;
   Preslice<aod::MFTTracks> perCol = o2::aod::fwdtrack::collisionId;
+  //PresliceUnsorted<MFTTracksWColls> perColBis = o2::aod::fwdtrack::bestCollisionId;
+  PresliceUnsorted<aod::BestCollisionsFwd> perColBis = o2::aod::fwdtrack::bestCollisionId;
   Preslice<aod::McParticles> perMcCol = aod::mcparticle::mcCollisionId;
   Preslice<aod::Tracks> perColCentral = aod::track::collisionId;
 
@@ -165,7 +168,7 @@ struct PseudorapidityDensityMFT {
   PROCESS_SWITCH(PseudorapidityDensityMFT, processTagging, "Collect event sample stats", true);
 
 
-  using MFTTracksWColls = soa::Join<o2::aod::MFTTracks, aod::BestCollisionsFwd>;
+
 
   Partition<MFTTracksWColls> sample = (aod::fwdtrack::eta < -2.8f) && (aod::fwdtrack::eta > -3.2f);
 
@@ -186,6 +189,35 @@ struct PseudorapidityDensityMFT {
   using FiCentralTracks = soa::Filtered<soa::Join<aod::Tracks, aod::TracksExtra, aod::TrackSelection, aod::TracksDCA>>; // central tracks for INEL>0
 
   using CollwEv = soa::Join<aod::Collisions, aod::EvSels>;
+
+  void processTest(CollwEv::iterator const& collision,
+                   o2::aod::MFTTracks const&,
+                   soa::SmallGroups<aod::BestCollisionsFwd> const& atracks)
+  {
+    if (atracks.size() == 0) {
+      return;
+    }
+    registry.fill(HIST("EventSelection"), 1.);
+    if (!useEvSel || (useEvSel && collision.sel8())) {
+      registry.fill(HIST("EventSelection"), 2.);
+      auto z = collision.posZ();
+
+      for (auto& track : atracks){
+        auto normalTrack = track.mfttrack();
+        int isAmbiguous=0;
+
+        registry.fill(HIST("TracksEtaZvtx"), normalTrack.eta(), z);
+        if (track.ambDegree()>2)
+        {
+          //only ambiguous tracks here
+          isAmbiguous=1;
+        }
+        registry.fill(HIST("Tracks/Control/TrackIsAmb"), isAmbiguous);
+
+      }
+    }
+  }
+  PROCESS_SWITCH(PseudorapidityDensityMFT, processTest, "Process test", true);
 
   void processMultReassoc(CollwEv const& collisions,
                    MFTTracksWColls const& tracks, FiCentralTracks const& centraltracks)
@@ -227,7 +259,7 @@ struct PseudorapidityDensityMFT {
 
           if ((track.globalIndex()<35) && (track.globalIndex()>22) && (nVis==0))
           {
-            printf("----------------- track.globalIndex %lld, bestCol %lld, track.collisionId %lld \n", track.globalIndex(), track.bestCollisionId(), track.collisionId());
+            //printf("----------------- track.globalIndex %lld, bestCol %lld, track.collisionId %lld \n", track.globalIndex(), track.bestCollisionId(), track.collisionId());
           }
 
           if (track.ambDegree()>2)

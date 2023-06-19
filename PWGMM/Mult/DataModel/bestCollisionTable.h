@@ -27,7 +27,7 @@ DECLARE_SOA_COLUMN(PhiStatic, phis, float);
 } // namespace track
 namespace fwdtrack
 {
-DECLARE_SOA_INDEX_COLUMN_FULL(BestCollision, bestCollision, int32_t, Collisions, "");
+DECLARE_SOA_INDEX_COLUMN_FULL(BestCollision, bestCollision, int, Collisions, "");
 DECLARE_SOA_COLUMN(AmbDegree, ambDegree, int);// degree of ambiguity of the track
 DECLARE_SOA_COLUMN(BestDCAXY, bestDCAXY, float);
 DECLARE_SOA_COLUMN(BestDCAX, bestDCAX, float);
@@ -38,7 +38,13 @@ DECLARE_SOA_COLUMN(EtaStatic, etas, float);
 DECLARE_SOA_COLUMN(PhiStatic, phis, float);
 } // namespace fwdtrack
 
-DECLARE_SOA_TABLE(BestCollisionsFwd, "AOD", "BESTCOLLFWD", aod::fwdtrack::AmbDegree,
+namespace pwgmm::indices
+{
+DECLARE_SOA_INDEX_COLUMN(Track, track);
+DECLARE_SOA_INDEX_COLUMN(MFTTrack, mfttrack);
+}
+
+DECLARE_SOA_TABLE(BestCollisionsFwd, "AOD", "BESTCOLLFWD", o2::soa::Index<>, pwgmm::indices::MFTTrackId, aod::fwdtrack::AmbDegree,
                   aod::fwdtrack::BestCollisionId, aod::fwdtrack::BestDCAXY,
                   fwdtrack::BestDCAX, fwdtrack::BestDCAY);//beware: depending on which process produced this table,
                   //it can be joined with either MFTAmbiguousTracks OR MFTTracks
@@ -48,10 +54,7 @@ DECLARE_SOA_TABLE(BestCollFwdExtra, "AOD", "BESTCOLLFWDE",
                   fwdtrack::PtStatic, fwdtrack::PStatic, fwdtrack::EtaStatic,
                   fwdtrack::PhiStatic); // Snp does not exist
 
-namespace pwgmm::indices
-{
-DECLARE_SOA_INDEX_COLUMN(Track, track);
-}
+
 
 DECLARE_SOA_TABLE(ReassignedTracksCore, "AOD", "CRRETRACKS",
                   aod::track::BestCollisionId,

@@ -42,9 +42,8 @@ using namespace o2;
 using namespace o2::framework;
 using namespace o2::aod::track;
 
-AxisSpec DCAxyAxis = {200, -1, 20};
-int nLoopForPrint = 0;
-int nVis=0;
+AxisSpec DCAxyAxis = {500, -1, 50};
+
 
 struct AmbiguousTrackPropagation {
   //  Produces<aod::BestCollisions> tracksBestCollisions;
@@ -88,9 +87,11 @@ struct AmbiguousTrackPropagation {
 
     if (produceHistos) {
       registry.add({"DeltaZ", " ; #Delta#it{z}", {HistType::kTH1F, {{201, -10.1, 10.1}}}});
-      registry.add({"ReassignedCounter", " ; n_{reassigned}^{trk}", {HistType::kTH1I, {{1, 0.5, 1.5}}}});
       registry.add({"TracksDCAXY", " ; DCA_{XY} (cm)", {HistType::kTH1F, {DCAxyAxis}}});
+      registry.add({"ReassignedDCAXY", " ; DCA_{XY} (cm)", {HistType::kTH1F, {DCAxyAxis}}});
+      registry.add({"TracksOrigDCAXY", " ; DCA_{XY} (wrt orig coll) (cm)", {HistType::kTH1F, {DCAxyAxis}}});
       registry.add({"TracksAmbDegree", " ; N_{coll}^{comp}", {HistType::kTH1I, {{41,-0.5,40.5}}}});
+      registry.add({"TrackIsAmb", " ; isAmbiguous", {HistType::kTH1I, {{2,-0.5,1.5}}}});
     }
   }
 
@@ -241,19 +242,24 @@ struct AmbiguousTrackPropagation {
           {
             registry.fill(HIST("DeltaZ"), track.collision().posZ()-collision.posZ());//deltaZ between the 1st coll zvtx and the other compatible ones
           }
+
+          if((collision.globalIndex()==track.collisionId()) && produceHistos)
+          {
+            registry.fill(HIST("TracksOrigDCAXY"), dcaInfo);
+          }
         }
       }
 
       if ((bestCol != track.collisionId()) && produceHistos)
       {
         //reassigned
-        registry.fill(HIST("ReassignedCounter"), 1);
+        registry.fill(HIST("ReassignedDCAXY"), bestDCA);
       }
       if (produceHistos){
         registry.fill(HIST("TracksAmbDegree"), degree);
       }
 
-      fwdtracksBestCollisions(degree, bestCol, bestDCA, bestDCAx, bestDCAy);
+      fwdtracksBestCollisions(-1, degree, bestCol, bestDCA, bestDCAx, bestDCAy);
         if (produceExtra)
         {
           fwdtracksBestCollExtra(bestTrackPar.getX(),
@@ -326,23 +332,29 @@ struct AmbiguousTrackPropagation {
           {
             registry.fill(HIST("TracksDCAXY"), dcaInfo);
           }
+
+          if((collision.globalIndex()==track.collisionId()) && produceHistos)
+          {
+            registry.fill(HIST("TracksOrigDCAXY"), dcaInfo);
+          }
       }
       if ((bestCol != track.collisionId()) && produceHistos)
       {
         //reassigned
-        registry.fill(HIST("ReassignedCounter"), 1);
+        registry.fill(HIST("ReassignedDCAXY"), bestDCA);
 
-        if (nLoopForPrint<10)
-        {
-          printf("----------------- track.globalIndex %lld, bestCol %lld, track.collisionId %lld, nVis %d \n", track.globalIndex(), bestCol, track.collisionId(), nVis);
-          nLoopForPrint++;
-        }
       }
       if (produceHistos){
+        int isAmbiguous = 0;
         registry.fill(HIST("TracksAmbDegree"), compatibleColls.size());
+        if(compatibleColls.size()>1)
+        {
+          isAmbiguous=1;
+        }
+        registry.fill(HIST("TrackIsAmb"), isAmbiguous);
       }
 
-      fwdtracksBestCollisions(compatibleColls.size(), bestCol, bestDCA, bestDCAx, bestDCAy);
+      fwdtracksBestCollisions(track.globalIndex(), compatibleColls.size(), bestCol, bestDCA, bestDCAx, bestDCAy);
         if (produceExtra)
         {
           fwdtracksBestCollExtra(bestTrackPar.getX(),
@@ -351,7 +363,7 @@ struct AmbiguousTrackPropagation {
             bestTrackPar.getP(), bestTrackPar.getEta(), bestTrackPar.getPhi());
         }
     }
-    nVis++;
+
   }
   PROCESS_SWITCH(AmbiguousTrackPropagation, processMFTReassoc, "Fill BestCollisionsFwd for MFT ambiguous tracks with the new data model", false);
 };

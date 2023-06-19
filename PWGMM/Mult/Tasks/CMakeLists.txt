@@ -19,20 +19,10 @@ o2physics_add_dpl_workflow(dndeta
                     PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore
                     COMPONENT_NAME Analysis)
 
-o2physics_add_dpl_workflow(dndeta-hi
-                    SOURCES dndeta-hi.cxx
-                    PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore
-                    COMPONENT_NAME Analysis)
-
 o2physics_add_dpl_workflow(dndeta-mft
-                    SOURCES dndeta-mft.cxx
-                    PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore
-                    COMPONENT_NAME Analysis)
-
-  o2physics_add_dpl_workflow(dndeta-mft-test
-                    SOURCES dndeta-mft-test.cxx
-                    PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore
-                    COMPONENT_NAME Analysis)
+                  SOURCES dndeta-mft.cxx
+                  PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore
+                  COMPONENT_NAME Analysis)
 
 o2physics_add_dpl_workflow(flatenicity-fv0
                     SOURCES flatenicityFV0.cxx
