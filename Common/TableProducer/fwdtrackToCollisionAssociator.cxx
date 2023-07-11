@@ -27,6 +27,8 @@ using namespace o2::framework;
 using namespace o2::framework::expressions;
 using namespace o2::aod;
 
+constexpr static uint32_t kMFT = CollisionAssociation<false>::DetTypes::MFT;
+
 struct FwdTrackToCollisionAssociation {
   Produces<FwdTrackAssoc> fwdassociation;
   Produces<FwdTrkCompColls> fwdreverseIndices;
@@ -35,6 +37,7 @@ struct FwdTrackToCollisionAssociation {
 
   Configurable<float> nSigmaForTimeCompat{"nSigmaForTimeCompat", 4.f, "number of sigmas for time compatibility"};
   Configurable<float> timeMargin{"timeMargin", 0.f, "time margin in ns added to uncertainty because of uncalibrated TPC"};
+  Configurable<float> timeShift{"timeShift", 0.f, "time shift in ns applied to MFT time window because of misalignment"};
   Configurable<bool> includeUnassigned{"includeUnassigned", false, "consider also tracks which are not assigned to any collision"};
   Configurable<bool> fillTableOfCollIdsPerTrack{"fillTableOfCollIdsPerTrack", false, "fill additional table with vector of collision ids per track"};
 
@@ -59,6 +62,7 @@ struct FwdTrackToCollisionAssociation {
     // set options in track-to-collision association
     collisionAssociator.setNumSigmaForTimeCompat(nSigmaForTimeCompat);
     collisionAssociator.setTimeMargin(timeMargin);
+    collisionAssociator.setMFTTimeShift(timeShift);
     collisionAssociator.setTrackSelectionOptionForStdAssoc(track_association::TrackSelection::None);
     collisionAssociator.setUsePvAssociation(false);
     collisionAssociator.setIncludeUnassigned(includeUnassigned);
@@ -86,7 +90,7 @@ struct FwdTrackToCollisionAssociation {
                                AmbiguousMFTTracks const& ambiguousTracks,
                                BCs const& bcs)
   {
-    collisionAssociator.runAssocWithTime(collisions, tracks, tracks, ambiguousTracks, bcs, mftassociation, mftreverseIndices);
+    collisionAssociator.runAssocWithTime<kMFT>(collisions, tracks, tracks, ambiguousTracks, bcs, mftassociation, mftreverseIndices);
   }
   PROCESS_SWITCH(FwdTrackToCollisionAssociation, processMFTAssocWithTime, "Use MFTtrack-to-collision association based on time", true);
 

@@ -51,8 +51,14 @@ class CollisionAssociation
   /// Default constructor
   CollisionAssociation() = default;
 
+  enum DetTypes {
+   ITS = BIT(0),
+   MFT = BIT(23)
+  };
+
   void setNumSigmaForTimeCompat(float nSigma) { mNumSigmaForTimeCompat = nSigma; }
   void setTimeMargin(float timeMargin) { mTimeMargin = timeMargin; }
+  void setMFTTimeShift(float timeShift) { mTimeShift = timeShift; }
   void setTrackSelectionOptionForStdAssoc(int option) { mTrackSelection = option; }
   void setUsePvAssociation(bool enable = true) { mUsePvAssociation = enable; }
   void setIncludeUnassigned(bool enable = true) { mIncludeUnassigned = enable; }
@@ -116,7 +122,7 @@ class CollisionAssociation
     }
   }
 
-  template <typename TTracksUnfiltered, typename TTracks, typename TAmbiTracks, typename Assoc, typename RevIndices>
+  template <uint32_t detType = 0u, typename TTracksUnfiltered, typename TTracks, typename TAmbiTracks, typename Assoc, typename RevIndices>
   void runAssocWithTime(Collisions const& collisions,
                         TTracksUnfiltered const& tracksUnfiltered,
                         TTracks const& tracks,
@@ -168,6 +174,10 @@ class CollisionAssociation
         }
 
         float trackTime = track.trackTime();
+        if (detType == MFT)
+        {
+          trackTime+=mTimeShift;// middle of the MFT readout time window, shifted by mTimeShift
+        }
         float trackTimeRes = track.trackTimeRes();
         if constexpr (isCentralBarrel) {
           if (mUsePvAssociation && track.isPVContributor()) {
@@ -236,6 +246,7 @@ class CollisionAssociation
  private:
   float mNumSigmaForTimeCompat{4.};                                         // number of sigma for time compatibility
   float mTimeMargin{500.};                                                  // additional time margin in ns
+  float mTimeShift{0.};                                                     // time shift of readout time window due to misalignment
   int mTrackSelection{track_association::TrackSelection::GlobalTrackWoDCA}; // track selection for central barrel tracks (standard association only)
   bool mUsePvAssociation{true};                                             // use the information of PV contributors
   bool mIncludeUnassigned{true};                                            // include tracks that were originally not assigned to any collision

@@ -103,6 +103,7 @@ struct PseudorapidityDensityMFT {
       {"TracksPtEta", " ; p_{T} (GeV/c); #eta", {HistType::kTH2F, {PtAxis, EtaAxis}}},                  //
       {"EventSelection", ";status;events", {HistType::kTH1F, {{7, 0.5, 7.5}}}},                         //
 
+      {"Nch", "; N_{trk}^{MFT}; count", {HistType::kTH1F, {{701, -0.5, 700.5}}}}
     } //
   };
 
@@ -245,6 +246,8 @@ struct PseudorapidityDensityMFT {
                    aod::MFTTracks const& tracks,
                    FiCentralTracks const& midtracks, aod::Tracks const&)
   {
+    registry.fill(HIST("Nch"), tracks.size());
+
 
     registry.fill(HIST("EventSelection"), 1.);
     if (!useEvSel || (useEvSel && collision.sel8())) {
@@ -290,6 +293,9 @@ struct PseudorapidityDensityMFT {
                           soa::SmallGroups<aod::BestCollisionsFwd> const& retracks,
                           FiCentralTracks const& midtracks, aod::Tracks const&)
   {
+    registry.fill(HIST("Nch"), retracks.size());
+
+
     registry.fill(HIST("EventSelection"), 1.);
     if (!useEvSel || (useEvSel && collision.sel8())) {
       registry.fill(HIST("EventSelection"), 2.);
