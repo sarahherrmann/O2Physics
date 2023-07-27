@@ -35,27 +35,38 @@ struct AssessmentMFT {
       {"TracksChi2", "; #chi^{2}; tracks", {HistType::kTH1F, {{600, 0, 20}}}},                             //
       {"TracksNclustersEta", "; nClusters; #eta; tracks", {HistType::kTH2F, {{7, 4, 10}, {100, -8, 8}}}},  //
       {"TracksTime", "; time; #count", {HistType::kTH1D, {{6000000, 0, 60000}}}},                          //
+      {"TracksXY", "; x (cm); y (cm); tracks", {HistType::kTH2F, {{300, -15, 15}, {300, -15, 15}}}},  //
     }                                                                                                      //
   };
 
-  void process(aod::Collisions::iterator const& collision, aod::MFTTracks const& tracks, aod::BCs const& bcs)
+  // void process(aod::Collisions::iterator const& collision, aod::MFTTracks const& tracks, aod::BCs const& bcs)
+  // {
+  //   for (auto& track : tracks) {
+  //     float phi = track.phi();
+  //     o2::math_utils::bringTo02Pi(phi);
+  //     registry.fill(HIST("TracksPhiEta"), phi, track.eta());
+  //
+  //     registry.fill(HIST("TracksChi2Eta"), track.chi2(), track.eta());
+  //     registry.fill(HIST("TracksChi2"), track.chi2());
+  //     registry.fill(HIST("TracksNclustersEta"), track.nClusters(), track.eta());
+  //
+  //     auto collisionBCID = collision.bcId();
+  //     auto collisionBC = (bcs.iteratorAt(collisionBCID)).globalBC();
+  //
+  //     double seconds = (collisionBC * o2::constants::lhc::LHCBunchSpacingNS + track.trackTime()) / 1e9;
+  //     // this is in s
+  //     registry.fill(HIST("TracksTime"), seconds);
+  //   }
+  // }
+
+
+  void process(aod::MFTTrack const& track)
   {
-    for (auto& track : tracks) {
-      float phi = track.phi();
-      o2::math_utils::bringTo02Pi(phi);
-      registry.fill(HIST("TracksPhiEta"), phi, track.eta());
+    float phi = track.phi();
+    o2::math_utils::bringTo02Pi(phi);
+    registry.fill(HIST("TracksPhiEta"), phi, track.eta());
+    registry.fill(HIST("TracksXY"), track.x(), track.y());
 
-      registry.fill(HIST("TracksChi2Eta"), track.chi2(), track.eta());
-      registry.fill(HIST("TracksChi2"), track.chi2());
-      registry.fill(HIST("TracksNclustersEta"), track.nClusters(), track.eta());
-
-      auto collisionBCID = collision.bcId();
-      auto collisionBC = (bcs.iteratorAt(collisionBCID)).globalBC();
-
-      double seconds = (collisionBC * o2::constants::lhc::LHCBunchSpacingNS + track.trackTime()) / 1e9;
-      // this is in s
-      registry.fill(HIST("TracksTime"), seconds);
-    }
   }
 };
 

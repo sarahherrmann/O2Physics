@@ -157,6 +157,21 @@ struct PseudorapidityDensityMFT {
       x->SetBinLabel(5, "Selected INEL>0");
     }
 
+    if (doprocessMultReweight) {
+      ccdb->setURL(url.value);
+      // Enabling object caching, otherwise each call goes to the CCDB server
+      ccdb->setCaching(true);
+      ccdb->setLocalObjectValidityChecking();
+      // Not later than now, will be replaced by the value of the train creation
+      // This avoids that users can replace objects **while** a train is running
+      ccdb->setCreatedNotAfter(nolaterthan.value);
+      LOGF(info, "Getting object %s", path.value.data());
+      histoReweight = ccdb->getForTimeStamp<TH1D>(path.value, nolaterthan.value);
+      if (!histoReweight) {
+        LOGF(fatal, "object not found!");
+        }
+      }
+
     if (doprocessMultReassoc) {
       registry.add({"Tracks/Control/DeltaZ", " ; #it{z_{orig}}-#it{z_{reass}}", {HistType::kTH1F, {ZAxis}}});
 
@@ -287,6 +302,56 @@ struct PseudorapidityDensityMFT {
     }
   }
   PROCESS_SWITCH(PseudorapidityDensityMFT, processMult, "Process reco or data info", true);
+
+
+  void processMultReweight(CollwEv::iterator const& collision,
+                   aod::MFTTracks const& tracks,
+                   FiCentralTracks const& midtracks, aod::Tracks const&)
+  {
+    registry.fill(HIST("Nch"), tracks.size());
+
+
+    registry.fill(HIST("EventSelection"), 1.);
+    if (!useEvSel || (useEvSel && collision.sel8())) {
+      registry.fill(HIST("EventSelection"), 2.);
+      auto z = collision.posZ();
+      auto perCollisionSample = sampleCentral->sliceByCached(o2::aod::track::collisionId, collision.globalIndex(), cache);
+      // auto perCollisionSample = sample->sliceByCached(o2::aod::fwdtrack::collisionId, collision.globalIndex(), cache);
+      auto Ntrk = perCollisionSample.size();
+
+      float weight = 1.;
+      weight = histoReweight->GetBinContent(histoReweight->FindBin(z));
+      //printf("----------- weight %f\n", weight);
+      registry.fill(HIST("EventsNtrkZvtx"), Ntrk, z, weight);
+
+      if (midtracks.size() > 0) // INEL>0
+      {
+        registry.fill(HIST("EventSelection"), 3.);
+        registry.fill(HIST("EventsNtrkZvtx_gt0"), Ntrk, z, weight);
+      }
+
+      if (tracks.size() > 0) {
+        for (auto& track : tracks) {
+          registry.fill(HIST("TracksEtaZvtx"), track.eta(), z, weight);
+          if (midtracks.size() > 0) // INEL>0
+          {
+            registry.fill(HIST("Tracks/EtaZvtx_gt0"), track.eta(), z, weight);
+          }
+          float phi = track.phi();
+          o2::math_utils::bringTo02Pi(phi);
+          registry.fill(HIST("TracksPhiEta"), phi, track.eta(), weight);
+          registry.fill(HIST("TracksPtEta"), track.pt(), track.eta(), weight);
+          if ((track.eta() < -2.0f) && (track.eta() > -3.9f)) {
+            registry.fill(HIST("TracksPhiZvtx"), phi, z, weight);
+          }
+        }
+      }
+
+    } else {
+      registry.fill(HIST("EventSelection"), 4.);
+    }
+  }
+  PROCESS_SWITCH(PseudorapidityDensityMFT, processMultReweight, "Process reco or data info with rw zvtx", false);
 
   void processMultReassoc(CollwEv::iterator const& collision,
                           o2::aod::MFTTracks const&,

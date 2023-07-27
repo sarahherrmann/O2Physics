@@ -39,15 +39,22 @@ o2physics_add_dpl_workflow(flatenicity-fv0
                     PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore
                     COMPONENT_NAME Analysis)
 
+o2physics_add_dpl_workflow(assessment-mft
+                    SOURCES assessment-mft.cxx
+                    PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore
+                    COMPONENT_NAME Analysis)
+
 o2physics_add_dpl_workflow(vertexing-fwd
                     SOURCES vertexing-fwd.cxx
                     PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore
                                           O2::ReconstructionDataFormats
                     COMPONENT_NAME Analysis)
 
-o2physics_add_dpl_workflow(assessment-mft
-                    SOURCES assessment-mft.cxx
+o2physics_add_dpl_workflow(match-mft-fit
+                    SOURCES match-mft-ft0.cxx
                     PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore
+                                          O2::ReconstructionDataFormats
+                                          O2::DetectorsBase O2::DetectorsCommonDataFormats
                     COMPONENT_NAME Analysis)
 
 o2physics_add_dpl_workflow(effpt-mft

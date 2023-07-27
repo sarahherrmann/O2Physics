@@ -168,16 +168,20 @@ class CollisionAssociation
         if (!mIncludeUnassigned && !track.has_collision()) {
           continue;
         }
-        const int64_t bcOffset = (int64_t)globalBC[track.filteredIndex()] - (int64_t)collBC;
-        if (std::abs(bcOffset) > bOffsetMax) {
-          continue;
-        }
 
         float trackTime = track.trackTime();
         if (detType == MFT)
         {
           trackTime+=mTimeShift;// middle of the MFT readout time window, shifted by mTimeShift
         }
+
+        const int64_t bcOffset = (int64_t)globalBC[track.filteredIndex()] + trackTime/constants::lhc::LHCBunchSpacingNS - (int64_t)collBC;
+        //offset in BC between the middle of the track time window and the BC of the coll 
+        if (std::abs(bcOffset) > bOffsetMax) {
+          continue;
+        }
+
+
         float trackTimeRes = track.trackTimeRes();
         if constexpr (isCentralBarrel) {
           if (mUsePvAssociation && track.isPVContributor()) {
