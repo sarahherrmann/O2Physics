@@ -79,8 +79,9 @@ struct PseudorapidityDensityMFT {
   Configurable<bool> useEvSel{"useEvSel", true, "use event selection"};
   ConfigurableAxis multBinning{"multBinning", {701, -0.5, 700.5}, ""};
 
-  Configurable<bool> useZDiffCut{"useZDiffCut", true, "use Z difference cut"};
-  Configurable<float> maxZDiff{"maxZDiff", 1.0f, "max allowed Z difference for reconstruced collisions (cm)"};
+  Configurable<bool> usePhiCut{"usePhiCut", false, "use phi cut"};//temporary cut before deadmaps are implemented in MC
+  Configurable<float> minPhi{"minPhi", 2.f, "min phi angle for the phi cut"};
+  Configurable<float> maxPhi{"maxPhi", 3.f, "max phi angle for the phi cut"};
   //-----need access to CCDB to get the reweighting histogram
   Service<ccdb::BasicCCDBManager> ccdb;
   Configurable<std::string> path{"ccdb-path", "Users/s/sherrman/My/Object", "base path to the ccdb object"};
@@ -282,18 +283,41 @@ struct PseudorapidityDensityMFT {
 
       if (tracks.size() > 0) {
         for (auto& track : tracks) {
-          registry.fill(HIST("TracksEtaZvtx"), track.eta(), z);
-          if (midtracks.size() > 0) // INEL>0
-          {
-            registry.fill(HIST("Tracks/EtaZvtx_gt0"), track.eta(), z);
-          }
           float phi = track.phi();
           o2::math_utils::bringTo02Pi(phi);
-          registry.fill(HIST("TracksPhiEta"), phi, track.eta());
-          registry.fill(HIST("TracksPtEta"), track.pt(), track.eta());
-          if ((track.eta() < -2.0f) && (track.eta() > -3.9f)) {
-            registry.fill(HIST("TracksPhiZvtx"), phi, z);
+          if (usePhiCut)
+          {
+            float phiWeight = 2 * M_PI *(1.0 / (maxPhi-minPhi));
+            if (phi>=minPhi && phi<=maxPhi)
+            {
+              registry.fill(HIST("TracksEtaZvtx"), track.eta(), z, phiWeight);
+              if (midtracks.size() > 0) // INEL>0
+              {
+                registry.fill(HIST("Tracks/EtaZvtx_gt0"), track.eta(), z, phiWeight);
+              }
+
+              registry.fill(HIST("TracksPhiEta"), phi, track.eta(), phiWeight);
+              registry.fill(HIST("TracksPtEta"), track.pt(), track.eta(), phiWeight);
+              if ((track.eta() < -2.0f) && (track.eta() > -3.9f)) {
+                registry.fill(HIST("TracksPhiZvtx"), phi, z, phiWeight);
+              }
+            }
           }
+          else
+          {
+            registry.fill(HIST("TracksEtaZvtx"), track.eta(), z);
+            if (midtracks.size() > 0) // INEL>0
+            {
+              registry.fill(HIST("Tracks/EtaZvtx_gt0"), track.eta(), z);
+            }
+
+            registry.fill(HIST("TracksPhiEta"), phi, track.eta());
+            registry.fill(HIST("TracksPtEta"), track.pt(), track.eta());
+            if ((track.eta() < -2.0f) && (track.eta() > -3.9f)) {
+              registry.fill(HIST("TracksPhiZvtx"), phi, z);
+            }
+          }
+
         }
       }
 
@@ -519,11 +543,7 @@ struct PseudorapidityDensityMFT {
         }
 
         registry.fill(HIST("EventsZposDiff"), collision.posZ() - mcCollision.posZ());
-        if (useZDiffCut) {
-          if (std::abs(collision.posZ() - mcCollision.posZ()) > maxZDiff) {
-            continue;
-          }
-        }
+
         registry.fill(HIST("EventsNtrkZvtxGen"), perCollisionSample.size(), collision.posZ());
         ++moreThanOne;
       }

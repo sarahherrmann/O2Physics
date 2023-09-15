@@ -14,7 +14,7 @@
 //
 // \brief This code loops over every ambiguous MFT tracks and propagate
 //        them to the FT0-C, to reduce track ambiguity
-// \date 21/07/23
+// \date 31/08/23
 
 #include "Framework/runDataProcessing.h"
 #include "Framework/AnalysisTask.h"
@@ -350,25 +350,14 @@ T getCompatibleBCs(MFTTracksExtra::iterator const& track, aod::Collision const& 
     {
       printf("at the end of the bcs iterator %d\n", 1);
     }
+    T slice{{bcs.asArrowTable()->Slice(0, 0)}, (uint64_t)0};
+    //bcs.copyIndexBindings(slice); REMOVED IT BECAUSE I DON'T KNOW WHAT IT DOES HERE
+    return slice;//returns an empty slice
   }
 
-  if (bcIt == bcs.end())
-  {
-    printf("at the end of the bcs iterator %d, trackIndex %lld, nForVis %d\n", 1, track.globalIndex(),n);
-  }
-
-  if (bcIt != bcs.end() && maxBCId >= minBCId)
-  {
-    T slice{{bcs.asArrowTable()->Slice(minBCId, maxBCId - minBCId + 1)}, (uint64_t)minBCId};
-    bcs.copyIndexBindings(slice);
-    return slice;
-  }
-  else
-  {
-    T slice{{bcs.asArrowTable()->Slice(minBCId, maxBCId - minBCId)}, (uint64_t)minBCId};
-    bcs.copyIndexBindings(slice);
-    return slice;
-  }
+  T slice{{bcs.asArrowTable()->Slice(minBCId, maxBCId - minBCId + 1)}, (uint64_t)minBCId};
+  bcs.copyIndexBindings(slice);
+  return slice;
 
 }
 
@@ -411,9 +400,12 @@ struct matchmftfit {
       {"AllTracksXY", "; #it{x} (cm); #it{y} (cm);", {HistType::kTH2F, {{701, -35.05, 35.05}, {701, -35.05, 35.05}}}},
       {"DistChannelToProp", "; D (cm); #count", {HistType::kTH1D, {{101, 0, 100}}}},
       {"NchannelsPerBC", "; N_{channelC}; #count", {HistType::kTH1D, {{101, 0, 100}}}},
-      {"NgoodBCperTrack", "; N_{goodBC}; #count", {HistType::kTH1D, {{11, 0, 10}}}},                            //
+      {"NgoodBCperTrack", "; N_{goodBC}; #count", {HistType::kTH1D, {{11, 0, 10}}}},
+      {"NgoodBCperTrackINDIV", "; N_{goodBC}; #count", {HistType::kTH1D, {{11, 0, 10}}}},                           //
       {"NCompBCwFT0C", "; N_{compBC}; #count", {HistType::kTH1D, {{21, -0.5, 20.5}}}},
       {"NCompBCwFT0s", "; N_{compBC}; #count", {HistType::kTH1D, {{21, -0.5, 20.5}}}},
+      {"DiffInBCINDIV", "; indivBC-firstBC (globalBC); #count", {HistType::kTH1I, {{199, 0, 199}}}},
+      {"DiffInBC", "; goodBC-firstBC (globalBC); #count", {HistType::kTH1I, {{199, 0, 199}}}},
       {"possibleIsTrue", "; possible = true; #count", {HistType::kTH1D, {{2, -0.5, 1.5}}}},                            //
       {"GoodIsTrue", "; good = true; #count", {HistType::kTH1D, {{11, 0, 10}}}}                            //
     }                                                                                                        //
@@ -521,6 +513,9 @@ struct matchmftfit {
 
 
       auto bcSlice = getCompatibleBCs(track, collOrig, bcs, shiftBC);
+
+      //firstBC= global BC of the beginning of the ROF (shifted by deltaBC)
+      int64_t firstBC = collOrig.bc_as<ExtBCs>().globalBC() + (track.trackTime() - track.trackTimeRes())/o2::constants::lhc::LHCBunchSpacingNS + shiftBC;
 
       bool rofHasFT0A = false;
       bool rofHasFT0C = false;
@@ -668,10 +663,25 @@ struct matchmftfit {
       if (goodBC.size() > 0)
       {
         registry.fill(HIST("MatchedTracksXY"), trackPar.getX(), trackPar.getY());
+        int64_t diff = goodBC[0].globalBC()-firstBC;
+        registry.fill(HIST("DiffInBC"), diff);
       }
       registry.fill(HIST("AllTracksXY"), trackPar.getX(), trackPar.getY());
       registry.fill(HIST("NCompBCwFT0C"), nCompBCwft0C);
       registry.fill(HIST("NCompBCwFT0s"), nCompBCwft0s);
+
+      if (nCompBCwft0s == 1)
+      {
+        registry.fill(HIST("NgoodBCperTrackINDIV"), goodBC.size());
+
+        //position of the goodBC in the ROF for isolated colliding BCs
+        if (goodBC.size()>0)
+        {
+          int64_t diff = goodBC[0].globalBC()-firstBC;
+          registry.fill(HIST("DiffInBCINDIV"), diff);
+        }
+
+      }
 
 
       BcMft(track.globalIndex(), filler.BCids);

@@ -34,7 +34,7 @@ struct AssessmentMFT {
       {"TracksChi2Eta", "; #chi^{2}; #it{#eta}; tracks", {HistType::kTH2F, {{600, 0, 20}, {100, -8, 8}}}}, //
       {"TracksChi2", "; #chi^{2}; tracks", {HistType::kTH1F, {{600, 0, 20}}}},                             //
       {"TracksNclustersEta", "; nClusters; #eta; tracks", {HistType::kTH2F, {{7, 4, 10}, {100, -8, 8}}}},  //
-      {"TracksTime", "; time; #count", {HistType::kTH1D, {{6000000, 0, 60000}}}},                          //
+      {"TracksTime", "; time (ns); #count", {HistType::kTH1D, {{600000, 0, 60000}}}},                          //
       {"TracksXY", "; x (cm); y (cm); tracks", {HistType::kTH2F, {{300, -15, 15}, {300, -15, 15}}}},  //
     }                                                                                                      //
   };
@@ -66,6 +66,7 @@ struct AssessmentMFT {
     o2::math_utils::bringTo02Pi(phi);
     registry.fill(HIST("TracksPhiEta"), phi, track.eta());
     registry.fill(HIST("TracksXY"), track.x(), track.y());
+    registry.fill(HIST("TracksTime"), track.trackTime());
 
   }
 };

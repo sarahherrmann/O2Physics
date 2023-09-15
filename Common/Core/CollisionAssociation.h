@@ -158,7 +158,8 @@ class CollisionAssociation
 
     // loop over collisions to find time-compatible tracks
     auto trackBegin = tracks.begin();
-    constexpr auto bOffsetMax = 241; // 6 mus (ITS)
+    //const int bOffsetMax = 99*mNumSigmaForTimeCompat + mTimeMargin;
+    const int bOffsetMax = 600;
     for (const auto& collision : collisions) {
       const float collTime = collision.collisionTime();
       const float collTimeRes2 = collision.collisionTimeRes() * collision.collisionTimeRes();
@@ -176,8 +177,12 @@ class CollisionAssociation
         }
 
         const int64_t bcOffset = (int64_t)globalBC[track.filteredIndex()] + trackTime/constants::lhc::LHCBunchSpacingNS - (int64_t)collBC;
-        //offset in BC between the middle of the track time window and the BC of the coll 
-        if (std::abs(bcOffset) > bOffsetMax) {
+        //offset in BC between the middle of the track time window and the BC of the coll
+
+        const int64_t bcOffsetCollToColl = (int64_t)globalBC[track.filteredIndex()] - (int64_t)collBC;
+
+        if (std::abs(bcOffset) > bOffsetMax)
+        {
           continue;
         }
 
@@ -190,7 +195,8 @@ class CollisionAssociation
           }
         }
 
-        const float deltaTime = trackTime - collTime + bcOffset * constants::lhc::LHCBunchSpacingNS;
+        const float deltaTime = trackTime - collTime + bcOffsetCollToColl * constants::lhc::LHCBunchSpacingNS;
+
         float sigmaTimeRes2 = collTimeRes2 + trackTimeRes * trackTimeRes;
         LOGP(debug, "collision time={}, collision time res={}, track time={}, track time res={}, bc collision={}, bc track={}, delta time={}", collTime, collision.collisionTimeRes(), track.trackTime(), track.trackTimeRes(), collBC, globalBC[track.filteredIndex()], deltaTime);
 
