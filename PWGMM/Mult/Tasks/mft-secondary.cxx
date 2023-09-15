@@ -12,8 +12,9 @@
 // \file   mft-secondary.cxx
 // \author Sarah Herrmann <sarah.herrmann@cern.ch>
 //
-// \brief This code loops over every ambiguous MFT tracks and plots
-//        various DCA info
+// \brief This code loops over MFT tracks and plots
+//        various DCA info, for secondary and primary particles
+//        Run on MC AO2D only
 //
 // \dependencies mm-ambiguous-track-propagation, fwdtrack-to-collision-associator
 //

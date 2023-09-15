@@ -10,16 +10,17 @@
 // or submit itself to any jurisdiction.
 
 /// \file candidateSelectorOmegac.cxx
-/// \brief Omegac → Xi Pi selection task
+/// \brief Xic and Omegac → Xi Pi selection task
 /// \author Federica Zanone <federica.zanone@cern.ch>, Heidelberg University & GSI
 
-#include "Common/Core/TrackSelectorPID.h"
-#include "Common/Core/TrackSelection.h"
-#include "Common/Core/RecoDecay.h"
-#include "Framework/runDataProcessing.h"
 #include "Framework/AnalysisTask.h"
-#include "PWGHF/DataModel/CandidateSelectionTables.h"
+#include "Framework/runDataProcessing.h"
+
+#include "Common/Core/TrackSelection.h"
+#include "Common/Core/TrackSelectorPID.h"
+
 #include "PWGHF/DataModel/CandidateReconstructionTables.h"
+#include "PWGHF/DataModel/CandidateSelectionTables.h"
 
 using namespace o2;
 using namespace o2::aod;
@@ -27,6 +28,13 @@ using namespace o2::framework;
 using namespace o2::analysis::pdg;
 using namespace o2::aod::hf_cand_toxipi;
 using namespace o2::aod::hf_sel_toxipi;
+
+enum pidInfoStored {
+  kPiFromLam = 0,
+  kPrFromLam,
+  kPiFromCasc,
+  kPiFromCharm
+};
 
 /// Struct for applying Omegac selection cuts
 struct HfCandidateSelectorToXiPi {
@@ -49,7 +57,8 @@ struct HfCandidateSelectorToXiPi {
   Configurable<double> invMassOmegacMax{"invMassOmegacMax", 3.1, "Upper limit invariant mass spectrum charm baryon"};
 
   // kinematic selections
-  Configurable<double> etaTrackMax{"etaTrackMax", 0.8, "Max absolute value of eta"};
+  Configurable<double> etaTrackCharmBachMax{"etaTrackCharmBachMax", 0.8, "Max absolute value of eta for charm baryon bachelor"};
+  Configurable<double> etaTrackLFDauMax{"etaTrackLFDauMax", 1.0, "Max absolute value of eta for V0 and cascade daughters"};
   Configurable<double> ptPiFromCascMin{"ptPiFromCascMin", 0.15, "Min pT pi <- casc"};
   Configurable<double> ptPiFromOmeMin{"ptPiFromOmeMin", 0.2, "Min pT pi <- omegac"};
 
@@ -104,7 +113,10 @@ struct HfCandidateSelectorToXiPi {
   Configurable<int> nClustersItsMin{"nClustersItsMin", 3, "Minimum number of ITS clusters requirement for pi <- Omegac"};
   Configurable<int> nClustersItsInnBarrMin{"nClustersItsInnBarrMin", 1, "Minimum number of ITS clusters in inner barrel requirement for pi <- Omegac"};
 
-  using MyTrackInfo = aod::BigTracksPIDExtended;
+  TrackSelectorPi selectorPion;
+  TrackSelectorPr selectorProton;
+
+  using TracksSel = soa::Join<aod::TracksWDcaExtra, aod::TracksPidPi, aod::TracksPidPr>;
 
   HistogramRegistry registry{"registry"}; // for QA of selections
 
@@ -113,6 +125,20 @@ struct HfCandidateSelectorToXiPi {
 
   void init(InitContext const&)
   {
+    selectorPion.setRangePtTpc(ptPiPidTpcMin, ptPiPidTpcMax);
+    selectorPion.setRangeNSigmaTpc(-nSigmaTpcPiMax, nSigmaTpcPiMax);
+    selectorPion.setRangeNSigmaTpcCondTof(-nSigmaTpcCombinedPiMax, nSigmaTpcCombinedPiMax);
+    selectorPion.setRangePtTof(ptPiPidTofMin, ptPiPidTofMax);
+    selectorPion.setRangeNSigmaTof(-nSigmaTofPiMax, nSigmaTofPiMax);
+    selectorPion.setRangeNSigmaTofCondTpc(-nSigmaTofCombinedPiMax, nSigmaTofCombinedPiMax);
+
+    selectorProton.setRangePtTpc(ptPrPidTpcMin, ptPrPidTpcMax);
+    selectorProton.setRangeNSigmaTpc(-nSigmaTpcPrMax, nSigmaTpcPrMax);
+    selectorProton.setRangeNSigmaTpcCondTof(-nSigmaTpcCombinedPrMax, nSigmaTpcCombinedPrMax);
+    selectorProton.setRangePtTof(ptPrPidTofMin, ptPrPidTofMax);
+    selectorProton.setRangeNSigmaTof(-nSigmaTofPrMax, nSigmaTofPrMax);
+    selectorProton.setRangeNSigmaTofCondTpc(-nSigmaTofCombinedPrMax, nSigmaTofCombinedPrMax);
+
     registry.add("hSelPID", "hSelPID;status;entries", {HistType::kTH1F, {{12, 0., 12.}}});
     registry.add("hTest", "Test status consecutive;status;entries", {HistType::kTH1F, {{12, 0., 12.}}});
 
@@ -151,38 +177,23 @@ struct HfCandidateSelectorToXiPi {
     registry.add("hSelMassOme", "hSelMassOme;status;entries", {HistType::kTH1F, {{5, 0., 5.}}});
   }
 
-  void process(aod::HfCandToXiPi const& candidates, MyTrackInfo const&)
+  void process(aod::HfCandToXiPi const& candidates,
+               TracksSel const&)
   {
-    TrackSelectorPID selectorPion(kPiPlus);
-    selectorPion.setRangePtTPC(ptPiPidTpcMin, ptPiPidTpcMax);
-    selectorPion.setRangeNSigmaTPC(-nSigmaTpcPiMax, nSigmaTpcPiMax);
-    selectorPion.setRangeNSigmaTPCCondTOF(-nSigmaTpcCombinedPiMax, nSigmaTpcCombinedPiMax);
-    selectorPion.setRangePtTOF(ptPiPidTofMin, ptPiPidTofMax);
-    selectorPion.setRangeNSigmaTOF(-nSigmaTofPiMax, nSigmaTofPiMax);
-    selectorPion.setRangeNSigmaTOFCondTPC(-nSigmaTofCombinedPiMax, nSigmaTofCombinedPiMax);
-
-    TrackSelectorPID selectorProton(kProton);
-    selectorProton.setRangePtTPC(ptPrPidTpcMin, ptPrPidTpcMax);
-    selectorProton.setRangeNSigmaTPC(-nSigmaTpcPrMax, nSigmaTpcPrMax);
-    selectorProton.setRangeNSigmaTPCCondTOF(-nSigmaTpcCombinedPrMax, nSigmaTpcCombinedPrMax);
-    selectorProton.setRangePtTOF(ptPrPidTofMin, ptPrPidTofMax);
-    selectorProton.setRangeNSigmaTOF(-nSigmaTofPrMax, nSigmaTofPrMax);
-    selectorProton.setRangeNSigmaTOFCondTPC(-nSigmaTofCombinedPrMax, nSigmaTofCombinedPrMax);
-
     double massLambdaFromPDG = RecoDecay::getMassPDG(kLambda0);
     double massXiFromPDG = RecoDecay::getMassPDG(kXiMinus);
 
     int collId = -999;
 
     // looping over omegac candidates
-    for (auto const& candidate : candidates) {
+    for (const auto& candidate : candidates) {
 
       bool resultSelections = true; // True if the candidate passes all the selections, False otherwise
 
-      auto trackV0PosDau = candidate.posTrack_as<MyTrackInfo>();    // positive V0 daughter
-      auto trackV0NegDau = candidate.negTrack_as<MyTrackInfo>();    // negative V0 daughter
-      auto trackPiFromCasc = candidate.bachelor_as<MyTrackInfo>();  // pion <- cascade
-      auto trackPiFromOmeg = candidate.primaryPi_as<MyTrackInfo>(); // pion <- omegac
+      auto trackV0PosDau = candidate.posTrack_as<TracksSel>();    // positive V0 daughter
+      auto trackV0NegDau = candidate.negTrack_as<TracksSel>();    // negative V0 daughter
+      auto trackPiFromCasc = candidate.bachelor_as<TracksSel>();  // pion <- cascade
+      auto trackPiFromOmeg = candidate.primaryPi_as<TracksSel>(); // pion <- omegac
 
       auto trackPiFromLam = trackV0NegDau;
       auto trackPrFromLam = trackV0PosDau;
@@ -205,25 +216,25 @@ struct HfCandidateSelectorToXiPi {
       double etaV0NegDau = candidate.etaV0NegDau();
       double etaPiFromCasc = candidate.etaPiFromCasc();
       double etaPiFromOme = candidate.etaPiFromOme();
-      if (std::abs(etaV0PosDau) > etaTrackMax) {
+      if (std::abs(etaV0PosDau) > etaTrackLFDauMax) {
         resultSelections = false;
         registry.fill(HIST("hSelEtaPosV0Dau"), 0);
       } else {
         registry.fill(HIST("hSelEtaPosV0Dau"), 1);
       }
-      if (std::abs(etaV0NegDau) > etaTrackMax) {
+      if (std::abs(etaV0NegDau) > etaTrackLFDauMax) {
         resultSelections = false;
         registry.fill(HIST("hSelEtaNegV0Dau"), 0);
       } else {
         registry.fill(HIST("hSelEtaNegV0Dau"), 1);
       }
-      if (std::abs(etaPiFromCasc) > etaTrackMax) {
+      if (std::abs(etaPiFromCasc) > etaTrackLFDauMax) {
         resultSelections = false;
         registry.fill(HIST("hSelEtaPiFromCasc"), 0);
       } else {
         registry.fill(HIST("hSelEtaPiFromCasc"), 1);
       }
-      if (std::abs(etaPiFromOme) > etaTrackMax) {
+      if (std::abs(etaPiFromOme) > etaTrackCharmBachMax) {
         resultSelections = false;
         registry.fill(HIST("hSelEtaPiFromOme"), 0);
       } else {
@@ -418,45 +429,77 @@ struct HfCandidateSelectorToXiPi {
       }
 
       // track-level PID selection
-      int pidProton = -999;
-      int pidPiFromLam = -999;
-      int pidPiFromCasc = -999;
-      int pidPiFromOme = -999;
-      if (usePidTpcOnly == usePidTpcTofCombined) {
-        LOGF(fatal, "Check the PID configurables, usePidTpcOnly and usePidTpcTofCombined can't have the same value");
-      }
-      if (usePidTpcOnly) {
-        pidProton = selectorProton.getStatusTrackPIDTPC(trackPrFromLam);
-        pidPiFromLam = selectorPion.getStatusTrackPIDTPC(trackPiFromLam);
-        pidPiFromCasc = selectorPion.getStatusTrackPIDTPC(trackPiFromCasc);
-        pidPiFromOme = selectorPion.getStatusTrackPIDTPC(trackPiFromOmeg);
-      } else if (usePidTpcTofCombined) {
-        pidProton = selectorProton.getStatusTrackPIDTpcAndTof(trackPrFromLam);
-        pidPiFromLam = selectorPion.getStatusTrackPIDTpcAndTof(trackPiFromLam);
-        pidPiFromCasc = selectorPion.getStatusTrackPIDTpcAndTof(trackPiFromCasc);
-        pidPiFromOme = selectorPion.getStatusTrackPIDTpcAndTof(trackPiFromOmeg);
-      }
+
+      // for TrackSelectorPID
+      int statusPidPrFromLam = -999;
+      int statusPidPiFromLam = -999;
+      int statusPidPiFromCasc = -999;
+      int statusPidPiFromCharm = -999;
 
       bool statusPidLambda = false;
       bool statusPidCascade = false;
-      bool statusPidOmegac = false;
+      bool statusPidCharm = false;
 
-      if (pidProton == TrackSelectorPID::Status::PIDAccepted && pidPiFromLam == TrackSelectorPID::Status::PIDAccepted) {
+      int infoTpcStored = 0;
+      int infoTofStored = 0;
+
+      if (usePidTpcOnly == usePidTpcTofCombined) {
+        LOGF(fatal, "Check the PID configurables, usePidTpcOnly and usePidTpcTofCombined can't have the same value");
+      }
+
+      if (trackPiFromLam.hasTPC()) {
+        SETBIT(infoTpcStored, kPiFromLam);
+      }
+      if (trackPrFromLam.hasTPC()) {
+        SETBIT(infoTpcStored, kPrFromLam);
+      }
+      if (trackPiFromCasc.hasTPC()) {
+        SETBIT(infoTpcStored, kPiFromCasc);
+      }
+      if (trackPiFromOmeg.hasTPC()) {
+        SETBIT(infoTpcStored, kPiFromCharm);
+      }
+      if (trackPiFromLam.hasTOF()) {
+        SETBIT(infoTofStored, kPiFromLam);
+      }
+      if (trackPrFromLam.hasTOF()) {
+        SETBIT(infoTofStored, kPrFromLam);
+      }
+      if (trackPiFromCasc.hasTOF()) {
+        SETBIT(infoTofStored, kPiFromCasc);
+      }
+      if (trackPiFromOmeg.hasTOF()) {
+        SETBIT(infoTofStored, kPiFromCharm);
+      }
+
+      if (usePidTpcOnly) {
+        statusPidPrFromLam = selectorProton.statusTpc(trackPrFromLam);
+        statusPidPiFromLam = selectorPion.statusTpc(trackPiFromLam);
+        statusPidPiFromCasc = selectorPion.statusTpc(trackPiFromCasc);
+        statusPidPiFromCharm = selectorPion.statusTpc(trackPiFromOmeg);
+      } else if (usePidTpcTofCombined) {
+        statusPidPrFromLam = selectorProton.statusTpcAndTof(trackPrFromLam);
+        statusPidPiFromLam = selectorPion.statusTpcAndTof(trackPiFromLam);
+        statusPidPiFromCasc = selectorPion.statusTpcAndTof(trackPiFromCasc);
+        statusPidPiFromCharm = selectorPion.statusTpcAndTof(trackPiFromOmeg);
+      }
+
+      if (statusPidPrFromLam == TrackSelectorPID::Accepted && statusPidPiFromLam == TrackSelectorPID::Accepted) {
         statusPidLambda = true;
         if (resultSelections) {
           registry.fill(HIST("hTest"), 0.5);
         }
       }
 
-      if (pidProton == TrackSelectorPID::Status::PIDAccepted && pidPiFromLam == TrackSelectorPID::Status::PIDAccepted && pidPiFromCasc == TrackSelectorPID::Status::PIDAccepted) {
+      if (statusPidPrFromLam == TrackSelectorPID::Accepted && statusPidPiFromLam == TrackSelectorPID::Accepted && statusPidPiFromCasc == TrackSelectorPID::Accepted) {
         statusPidCascade = true;
         if (resultSelections) {
           registry.fill(HIST("hTest"), 1.5);
         }
       }
 
-      if (pidProton == TrackSelectorPID::Status::PIDAccepted && pidPiFromLam == TrackSelectorPID::Status::PIDAccepted && pidPiFromCasc == TrackSelectorPID::Status::PIDAccepted && pidPiFromOme == TrackSelectorPID::Status::PIDAccepted) {
-        statusPidOmegac = true;
+      if (statusPidPrFromLam == TrackSelectorPID::Accepted && statusPidPiFromLam == TrackSelectorPID::Accepted && statusPidPiFromCasc == TrackSelectorPID::Accepted && statusPidPiFromCharm == TrackSelectorPID::Accepted) {
+        statusPidCharm = true;
         if (resultSelections) {
           registry.fill(HIST("hTest"), 2.5);
         }
@@ -474,7 +517,7 @@ struct HfCandidateSelectorToXiPi {
       if (std::abs(invMassLambda - massLambdaFromPDG) < (nSigmaInvMassCut * sigmaInvMassLambda)) {
         statusInvMassLambda = true;
         registry.fill(HIST("hSelMassLam"), 1);
-        if (statusPidLambda && statusPidCascade && statusPidOmegac && resultSelections) {
+        if (statusPidLambda && statusPidCascade && statusPidCharm && resultSelections) {
           registry.fill(HIST("hTest"), 3.5);
         }
       } else {
@@ -484,7 +527,7 @@ struct HfCandidateSelectorToXiPi {
       if (std::abs(invMassCascade - massXiFromPDG) < (nSigmaInvMassCut * sigmaInvMassCascade)) {
         statusInvMassCascade = true;
         registry.fill(HIST("hSelMassCasc"), 1);
-        if (statusPidLambda && statusPidCascade && statusPidOmegac && statusInvMassLambda && resultSelections) {
+        if (statusPidLambda && statusPidCascade && statusPidCharm && statusInvMassLambda && resultSelections) {
           registry.fill(HIST("hTest"), 4.5);
         }
       } else {
@@ -494,14 +537,14 @@ struct HfCandidateSelectorToXiPi {
       if ((invMassOmegac >= invMassOmegacMin) && (invMassOmegac <= invMassOmegacMax)) {
         statusInvMassOmegac = true;
         registry.fill(HIST("hSelMassOme"), 1);
-        if (statusPidLambda && statusPidCascade && statusPidOmegac && statusInvMassLambda && statusInvMassCascade && resultSelections) {
+        if (statusPidLambda && statusPidCascade && statusPidCharm && statusInvMassLambda && statusInvMassCascade && resultSelections) {
           registry.fill(HIST("hTest"), 5.5);
         }
       } else {
         registry.fill(HIST("hSelMassOme"), 0);
       }
 
-      hfSelToXiPi(statusPidLambda, statusPidCascade, statusPidOmegac, statusInvMassLambda, statusInvMassCascade, statusInvMassOmegac, resultSelections,
+      hfSelToXiPi(statusPidLambda, statusPidCascade, statusPidCharm, statusInvMassLambda, statusInvMassCascade, statusInvMassOmegac, resultSelections, infoTpcStored, infoTofStored,
                   trackPiFromOmeg.tpcNSigmaPi(), trackPiFromCasc.tpcNSigmaPi(), trackPiFromLam.tpcNSigmaPi(), trackPrFromLam.tpcNSigmaPr(),
                   trackPiFromOmeg.tofNSigmaPi(), trackPiFromCasc.tofNSigmaPi(), trackPiFromLam.tofNSigmaPi(), trackPrFromLam.tofNSigmaPr());
 
@@ -518,10 +561,10 @@ struct HfCandidateSelectorToXiPi {
         if (statusPidCascade) {
           registry.fill(HIST("hSelPID"), 3.5);
         }
-        if (!statusPidOmegac) {
+        if (!statusPidCharm) {
           registry.fill(HIST("hSelPID"), 4.5);
         }
-        if (statusPidOmegac) {
+        if (statusPidCharm) {
           registry.fill(HIST("hSelPID"), 5.5);
         }
         if (!statusInvMassLambda) {
@@ -544,12 +587,12 @@ struct HfCandidateSelectorToXiPi {
         }
       }
 
-      if (statusPidLambda && statusPidCascade && statusPidOmegac && statusInvMassLambda && statusInvMassCascade && statusInvMassOmegac && resultSelections) {
+      if (statusPidLambda && statusPidCascade && statusPidCharm && statusInvMassLambda && statusInvMassCascade && statusInvMassOmegac && resultSelections) {
         hInvMassOmegac->Fill(invMassOmegac);
 
         if (candidate.collisionId() != collId) {
           hNEventsSaved->Fill(0.5);
-          collId = trackPiFromCasc.collisionId();
+          collId = candidate.collisionId();
         }
       }
     }

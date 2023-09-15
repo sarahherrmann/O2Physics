@@ -48,7 +48,7 @@ using namespace o2::framework::expressions;
 using namespace o2::soa;
 using std::array;
 
-using MyV0Photons = soa::Join<aod::V0Photons, aod::V0RecalculationAndKF>;
+using MyV0Photons = soa::Join<aod::V0PhotonsKF, aod::V0Recalculation, aod::V0KFEMReducedEventIds>;
 using MyV0Photon = MyV0Photons::iterator;
 
 struct PCMQCMC {
@@ -63,10 +63,8 @@ struct PCMQCMC {
   OutputObj<THashList> fOutputGen{"Generated"};
   THashList* fMainList = new THashList();
 
-  // static constexpr std::string_view ambtracktypes[2] = {"NonAmb", "Amb"};
   void addhistograms()
   {
-
     fMainList->SetOwner(true);
     fMainList->SetName("fMainList");
 
@@ -84,7 +82,6 @@ struct PCMQCMC {
     o2::aod::emphotonhistograms::AddHistClass(fMainList, "Generated");
     THashList* list_gen = reinterpret_cast<THashList*>(fMainList->FindObject("Generated"));
     o2::aod::emphotonhistograms::DefineHistograms(list_gen, "Generated", "Photon");
-    o2::aod::emphotonhistograms::DefineHistograms(list_gen, "Generated", "ConversionStudy");
 
     for (const auto& cut : fPCMCuts) {
       const char* cutname = cut.GetName();
@@ -132,7 +129,7 @@ struct PCMQCMC {
     fOutputGen.setObject(reinterpret_cast<THashList*>(fMainList->FindObject("Generated")));
   }
 
-  Preslice<MyV0Photons> perCollision = aod::v0photon::collisionId;
+  Preslice<MyV0Photons> perCollision = aod::v0photon::emreducedeventId;
   using MyMCV0Legs = soa::Join<aod::V0Legs, aod::EMMCParticleLabels>;
   void processQCMC(soa::Join<aod::EMReducedEvents, aod::EMReducedMCEventLabels> const& collisions, MyV0Photons const& v0photons, MyMCV0Legs const& v0legs, aod::EMMCParticles const& mcparticles, aod::EMReducedMCEvents const&)
   {
@@ -186,6 +183,11 @@ struct PCMQCMC {
             if (IsPhysicalPrimary(mcphoton.emreducedmcevent(), mcphoton, mcparticles)) {
               reinterpret_cast<TH1F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hPt_Photon_Primary"))->Fill(v0.pt());
               reinterpret_cast<TH2F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hEtaPhi_Photon_Primary"))->Fill(v0.phi(), v0.eta());
+
+              reinterpret_cast<TH2F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hPtGen_DeltaPtOverPtGen"))->Fill(mcphoton.pt(), (v0.pt() - mcphoton.pt()) / mcphoton.pt());
+              reinterpret_cast<TH2F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hPtGen_DeltaEta"))->Fill(mcphoton.pt(), v0.eta() - mcphoton.eta());
+              reinterpret_cast<TH2F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hPtGen_DeltaPhi"))->Fill(mcphoton.pt(), v0.phi() - mcphoton.phi());
+
             } else if (IsFromWD(mcphoton.emreducedmcevent(), mcphoton, mcparticles)) {
               reinterpret_cast<TH1F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hPt_Photon_FromWD"))->Fill(v0.pt());
               reinterpret_cast<TH2F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hEtaPhi_Photon_FromWD"))->Fill(v0.phi(), v0.eta());
@@ -197,10 +199,10 @@ struct PCMQCMC {
               // }
               // LOGF(info, "mcphoton.vx() = %f, mcphoton.vy() = %f, mcphoton.vz() = %f, mother_pdg = %d", mcphoton.vx(), mcphoton.vy(), mcphoton.vz(), mother_pdg);
               float rxy = sqrt(mcphoton.vx() * mcphoton.vx() + mcphoton.vy() * mcphoton.vy());
-              reinterpret_cast<TH1F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hRZ_Photon_test"))->Fill(mcphoton.vz(), rxy);
-              reinterpret_cast<TH1F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hPt_Photon_test"))->Fill(v0.pt());
-              reinterpret_cast<TH1F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hEta_Photon_test"))->Fill(v0.eta());
-              reinterpret_cast<TH1F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hPhi_Photon_test"))->Fill(v0.phi());
+              reinterpret_cast<TH1F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hRZ_Photon_hs"))->Fill(mcphoton.vz(), rxy);
+              reinterpret_cast<TH1F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hPt_Photon_hs"))->Fill(v0.pt());
+              reinterpret_cast<TH1F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hEta_Photon_hs"))->Fill(v0.eta());
+              reinterpret_cast<TH1F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hPhi_Photon_hs"))->Fill(v0.phi());
             }
 
             reinterpret_cast<TH1F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hConvPoint_diffX"))->Fill(elemc.vx(), v0.vx() - elemc.vx());
@@ -211,6 +213,8 @@ struct PCMQCMC {
             reinterpret_cast<TH1F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hConvPoint_diffZ_recalc"))->Fill(elemc.vz(), v0.recalculatedVtxZ() - elemc.vz());
 
             nv0++;
+            reinterpret_cast<TH1F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hV0R_minTrackX"))->Fill(v0.recalculatedVtxR(), std::min(pos.x(), ele.x()));
+            reinterpret_cast<TH1F*>(fMainList->FindObject("V0")->FindObject(cut.GetName())->FindObject("hDiffZ"))->Fill(pos.z() - ele.z());
             for (auto& leg : {pos, ele}) {
               o2::aod::emphotonhistograms::FillHistClass<EMHistType::kV0Leg>(list_v0leg_cut, "", leg);
             }
@@ -253,18 +257,6 @@ struct PCMQCMC {
       for (auto& mctrack : mctracks_coll) {
         if (abs(mctrack.y()) > maxY) {
           continue;
-        }
-
-        int photonid = IsEleFromPC(mctrack, mcparticles);
-        if (photonid > 0) {
-          auto mcphoton = mcparticles.iteratorAt(photonid);
-          if (!IsPhysicalPrimary(mcphoton.emreducedmcevent(), mcphoton, mcparticles)) {
-            continue;
-          }
-          float rxy = sqrt(pow(mctrack.vx(), 2) + pow(mctrack.vy(), 2));
-          reinterpret_cast<TH2F*>(fMainList->FindObject("Generated")->FindObject("hPhotonRZ"))->Fill(mctrack.vz(), rxy);
-          reinterpret_cast<TH2F*>(fMainList->FindObject("Generated")->FindObject("hPhotonRxy"))->Fill(mctrack.vx(), mctrack.vy());
-          reinterpret_cast<TH1F*>(fMainList->FindObject("Generated")->FindObject("hPhotonPhivsRxy"))->Fill(mctrack.phi(), rxy);
         }
 
         if (abs(mctrack.pdgCode()) == 22 && IsPhysicalPrimary(mctrack.emreducedmcevent(), mctrack, mcparticles)) {

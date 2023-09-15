@@ -22,6 +22,7 @@
 #include "Framework/AnalysisTask.h"
 #include "Framework/HistogramRegistry.h"
 #include "Framework/runDataProcessing.h"
+
 #include "PWGHF/DataModel/CandidateReconstructionTables.h"
 #include "PWGHF/DataModel/CandidateSelectionTables.h"
 
@@ -35,7 +36,8 @@ using namespace o2::analysis::hf_cuts_xic_to_p_k_pi;
 
 struct HfTaskXic {
   Configurable<int> selectionFlagXic{"selectionFlagXic", 1, "Selection Flag for Xic"};
-  Configurable<double> yCandMax{"yCandMax", -1., "max. cand. rapidity"};
+  Configurable<double> yCandGenMax{"yCandGenMax", 0.5, "max. gen particle rapidity"};
+  Configurable<double> yCandRecoMax{"yCandRecoMax", 0.8, "max. cand. rapidity"};
   Configurable<float> etaTrackMax{"etaTrackMax", 4.0, "max. track eta"};
   Configurable<float> dcaXYTrackMax{"dcaXYTrackMax", 0.0025, "max. DCAxy for track"};
   Configurable<float> dcaZTrackMax{"dcaZTrackMax", 0.0025, "max. DCAz for track"};
@@ -43,6 +45,9 @@ struct HfTaskXic {
 
   float etaMaxAcceptance = 0.8;
   float ptMinAcceptance = 0.1;
+
+  using TracksWPid = soa::Join<aod::TracksWDca,
+                               aod::TracksPidPi, aod::TracksPidKa, aod::TracksPidPr>;
 
   Filter filterSelectCandidates = (aod::hf_sel_candidate_xic::isSelXicToPKPi >= selectionFlagXic || aod::hf_sel_candidate_xic::isSelXicToPiKP >= selectionFlagXic);
 
@@ -67,9 +72,8 @@ struct HfTaskXic {
 
     }};
 
-  void init(o2::framework::InitContext&)
+  void init(InitContext&)
   {
-
     AxisSpec axisPPid = {100, 0.f, 10.0f, "#it{p} (GeV/#it{c})"};
     AxisSpec axisNSigmaPr = {100, -6.f, 6.f, "n#it{#sigma}_{p}"};
     AxisSpec axisNSigmaPi = {100, -6.f, 6.f, "n#it{#sigma}_{#pi}"};
@@ -179,12 +183,14 @@ struct HfTaskXic {
     return std::abs(etaProng) <= etaMaxAcceptance && ptProng >= ptMinAcceptance;
   }
 
-  void process(aod::Collision const& collision, soa::Join<aod::Tracks, aod::TracksDCA> const& tracks, soa::Filtered<soa::Join<aod::HfCand3Prong, aod::HfSelXicToPKPi>> const& candidates, aod::BigTracksPID const&)
+  void process(aod::Collision const& collision,
+               TracksWPid const& tracks,
+               soa::Filtered<soa::Join<aod::HfCand3Prong, aod::HfSelXicToPKPi>> const& candidates)
   {
     int nTracks = 0;
 
     if (collision.numContrib() > 1) {
-      for (auto const& track : tracks) {
+      for (const auto& track : tracks) {
         if (std::abs(track.eta()) > etaTrackMax) {
           continue;
         }
@@ -196,13 +202,13 @@ struct HfTaskXic {
     }
 
     registry.fill(HIST("Data/hMultiplicity"), nTracks); // filling the histo for multiplicity
-    for (auto const& candidate : candidates) {
+    for (const auto& candidate : candidates) {
       auto ptCandidate = candidate.pt();
       if (!(candidate.hfflag() & 1 << DecayType::XicToPKPi)) {
         continue;
       }
 
-      if (yCandMax >= 0. && std::abs(yXic(candidate)) > yCandMax) {
+      if (yCandRecoMax >= 0. && std::abs(yXic(candidate)) > yCandRecoMax) {
         continue;
       }
 
@@ -239,9 +245,9 @@ struct HfTaskXic {
       registry.fill(HIST("Data/hChi2PCA"), candidate.chi2PCA(), ptCandidate);
 
       // PID histos
-      const auto& trackProng0 = candidate.prong0_as<aod::BigTracksPID>(); // bachelor track
-      const auto& trackProng1 = candidate.prong1_as<aod::BigTracksPID>(); // bachelor track
-      const auto& trackProng2 = candidate.prong2_as<aod::BigTracksPID>(); // bachelor track
+      const auto& trackProng0 = candidate.prong0_as<TracksWPid>(); // bachelor track
+      const auto& trackProng1 = candidate.prong1_as<TracksWPid>(); // bachelor track
+      const auto& trackProng2 = candidate.prong2_as<TracksWPid>(); // bachelor track
 
       auto momentumProng0 = trackProng0.p();
       auto momentumProng1 = trackProng1.p();
@@ -276,16 +282,16 @@ struct HfTaskXic {
   }
   // Fill MC histograms
   void processMc(soa::Filtered<soa::Join<aod::HfCand3Prong, aod::HfSelXicToPKPi, aod::HfCand3ProngMcRec>> const& candidates,
-                 soa::Join<aod::McParticles, aod::HfCand3ProngMcGen> const& particlesMC, aod::BigTracksMC const& /*tracks*/)
+                 soa::Join<aod::McParticles, aod::HfCand3ProngMcGen> const& mcParticles)
   {
 
     // MC rec.
-    for (auto const& candidate : candidates) {
+    for (const auto& candidate : candidates) {
       // Selected Xic
       if (!(candidate.hfflag() & 1 << DecayType::XicToPKPi)) {
         continue;
       } // rapidity selection
-      if (yCandMax >= 0. && std::abs(yXic(candidate)) > yCandMax) {
+      if (yCandRecoMax >= 0. && std::abs(yXic(candidate)) > yCandRecoMax) {
         continue;
       }
 
@@ -359,10 +365,10 @@ struct HfTaskXic {
       }
     }
     // MC gen.
-    for (auto const& particle : particlesMC) {
+    for (const auto& particle : mcParticles) {
       if (std::abs(particle.flagMcMatchGen()) == 1 << DecayType::XicToPKPi) {
-        auto yParticle = RecoDecay::y(array{particle.px(), particle.py(), particle.pz()}, RecoDecay::getMassPDG(particle.pdgCode()));
-        if (yCandMax >= 0. && std::abs(yParticle) > yCandMax) {
+        auto yParticle = RecoDecay::y(std::array{particle.px(), particle.py(), particle.pz()}, RecoDecay::getMassPDG(particle.pdgCode()));
+        if (yCandGenMax >= 0. && std::abs(yParticle) > yCandGenMax) {
           continue;
         }
         auto ptParticle = particle.pt();
@@ -370,10 +376,10 @@ struct HfTaskXic {
         std::array<float, 3> yProngs;
         std::array<float, 3> etaProngs;
         int counter = 0;
-        for (auto const& daught : particle.daughters_as<aod::McParticles>()) {
+        for (const auto& daught : particle.daughters_as<aod::McParticles>()) {
           ptProngs[counter] = daught.pt();
           etaProngs[counter] = daught.eta();
-          yProngs[counter] = RecoDecay::y(array{daught.px(), daught.py(), daught.pz()}, RecoDecay::getMassPDG(daught.pdgCode()));
+          yProngs[counter] = RecoDecay::y(std::array{daught.px(), daught.py(), daught.pz()}, RecoDecay::getMassPDG(daught.pdgCode()));
           counter++;
         }
 
@@ -390,7 +396,6 @@ struct HfTaskXic {
       }
     }
   }
-
   PROCESS_SWITCH(HfTaskXic, processMc, "Process MC", false);
 };
 

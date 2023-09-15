@@ -22,6 +22,7 @@
 
 #include <vector>
 #include <memory>
+
 #include "CommonConstants/LHCConstants.h"
 #include "Framework/AnalysisDataModel.h"
 #include "Framework/ASoAHelpers.h"
@@ -40,9 +41,6 @@ enum TrackSelection {
 
 } // namespace track_association
 } // namespace o2::aod
-
-using namespace o2;
-using namespace o2::aod;
 
 template <bool isCentralBarrel>
 class CollisionAssociation
@@ -65,7 +63,7 @@ class CollisionAssociation
   void setFillTableOfCollIdsPerTrack(bool fill = true) { mFillTableOfCollIdsPerTrack = fill; }
 
   template <typename TTracks, typename Slice, typename Assoc, typename RevIndices>
-  void runStandardAssoc(Collisions const& collisions,
+  void runStandardAssoc(o2::aod::Collisions const& collisions,
                         TTracks const& tracks,
                         Slice& perCollisions,
                         Assoc& association,
@@ -78,23 +76,23 @@ class CollisionAssociation
         if constexpr (isCentralBarrel) {
           bool hasGoodQuality = true;
           switch (mTrackSelection) {
-            case track_association::TrackSelection::CentralBarrelRun2: {
+            case o2::aod::track_association::TrackSelection::CentralBarrelRun2: {
               unsigned char itsClusterMap = track.itsClusterMap();
-              if (!(track.tpcNClsFound() >= 50 && track.flags() & track::ITSrefit && track.flags() & track::TPCrefit && (TESTBIT(itsClusterMap, 0) || TESTBIT(itsClusterMap, 1)))) {
+              if (!(track.tpcNClsFound() >= 50 && track.flags() & o2::aod::track::ITSrefit && track.flags() & o2::aod::track::TPCrefit && (TESTBIT(itsClusterMap, 0) || TESTBIT(itsClusterMap, 1)))) {
                 hasGoodQuality = false;
               }
               break;
             }
-            case track_association::TrackSelection::None: {
+            case o2::aod::track_association::TrackSelection::None: {
               break;
             }
-            case track_association::TrackSelection::GlobalTrackWoDCA: {
+            case o2::aod::track_association::TrackSelection::GlobalTrackWoDCA: {
               if (!track.isGlobalTrackWoDCA()) {
                 hasGoodQuality = false;
               }
               break;
             }
-            case track_association::TrackSelection::QualityTracksITS: {
+            case o2::aod::track_association::TrackSelection::QualityTracksITS: {
               if (!track.isQualityTrackITS()) {
                 hasGoodQuality = false;
               }
@@ -127,7 +125,7 @@ class CollisionAssociation
                         TTracksUnfiltered const& tracksUnfiltered,
                         TTracks const& tracks,
                         TAmbiTracks const& ambiguousTracks,
-                        BCs const& bcs,
+                        o2::aod::BCs const& bcs,
                         Assoc& association,
                         RevIndices& reverseIndices)
   {
@@ -191,7 +189,7 @@ class CollisionAssociation
         if constexpr (isCentralBarrel) {
           if (mUsePvAssociation && track.isPVContributor()) {
             trackTime = track.collision().collisionTime();    // if PV contributor, we assume the time to be the one of the collision
-            trackTimeRes = constants::lhc::LHCBunchSpacingNS; // 1 BC
+            trackTimeRes = o2::constants::lhc::LHCBunchSpacingNS; // 1 BC
           }
         }
 
@@ -215,7 +213,7 @@ class CollisionAssociation
         if constexpr (isCentralBarrel) {
           if (mUsePvAssociation && track.isPVContributor()) {
             thresholdTime = trackTimeRes;
-          } else if (TESTBIT(track.flags(), track::TrackTimeResIsRange)) {
+          } else if (TESTBIT(track.flags(), o2::aod::track::TrackTimeResIsRange)) {
             thresholdTime = std::sqrt(sigmaTimeRes2) + mTimeMargin;
           } else {
             thresholdTime = mNumSigmaForTimeCompat * std::sqrt(sigmaTimeRes2) + mTimeMargin;

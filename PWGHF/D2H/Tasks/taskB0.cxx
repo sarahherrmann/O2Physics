@@ -14,12 +14,13 @@
 ///
 /// \author Alexandre Bigot <alexandre.bigot@cern.ch>, IPHC Strasbourg
 
-#include "Framework/runDataProcessing.h"
 #include "Framework/AnalysisTask.h"
 #include "Framework/HistogramRegistry.h"
+#include "Framework/runDataProcessing.h"
+
+#include "PWGHF/Core/SelectorCuts.h"
 #include "PWGHF/DataModel/CandidateReconstructionTables.h"
 #include "PWGHF/DataModel/CandidateSelectionTables.h"
-#include "PWGHF/Core/SelectorCuts.h"
 
 using namespace o2;
 using namespace o2::aod;
@@ -34,14 +35,15 @@ using namespace o2::framework::expressions;
 /// B0 analysis task
 struct HfTaskB0 {
   Configurable<int> selectionFlagB0{"selectionFlagB0", 1, "Selection Flag for B0"};
-  Configurable<double> yCandMax{"yCandMax", 1.44, "max. cand. rapidity"};
+  Configurable<double> yCandGenMax{"yCandGenMax", 0.5, "max. gen particle rapidity"};
+  Configurable<double> yCandRecoMax{"yCandRecoMax", 0.8, "max. cand. rapidity"};
   Configurable<float> etaTrackMax{"etaTrackMax", 0.8, "max. track pseudo-rapidity"};
   Configurable<float> ptTrackMin{"ptTrackMin", 0.1, "min. track transverse momentum"};
   Configurable<std::vector<double>> binsPt{"binsPt", std::vector<double>{hf_cuts_b0_to_d_pi::vecBinsPt}, "pT bin limits"};
   // MC checks
   Configurable<bool> checkDecayTypeMc{"checkDecayTypeMc", false, "Flag to enable DecayType histogram"};
 
-  using TracksWithSel = soa::Join<aod::BigTracksExtended, aod::TrackSelection>;
+  using TracksWithSel = soa::Join<aod::Tracks, aod::TrackSelection>;
 
   Filter filterSelectCandidates = (aod::hf_sel_candidate_b0::isSelB0ToDPi >= selectionFlagB0);
 
@@ -147,13 +149,15 @@ struct HfTaskB0 {
     return std::abs(etaProng) <= etaTrackMax && ptProng >= ptTrackMin;
   }
 
-  void process(soa::Filtered<soa::Join<aod::HfCandB0, aod::HfSelB0ToDPi>> const& candidates, soa::Join<aod::HfCand3Prong, aod::HfSelDplusToPiKPi> const&, TracksWithSel const&)
+  void process(soa::Filtered<soa::Join<aod::HfCandB0, aod::HfSelB0ToDPi>> const& candidates,
+               soa::Join<aod::HfCand3Prong, aod::HfSelDplusToPiKPi> const&,
+               TracksWithSel const&)
   {
-    for (auto const& candidate : candidates) {
+    for (const auto& candidate : candidates) {
       if (!TESTBIT(candidate.hfflag(), hf_cand_b0::DecayType::B0ToDPi)) {
         continue;
       }
-      if (yCandMax >= 0. && std::abs(yB0(candidate)) > yCandMax) {
+      if (yCandRecoMax >= 0. && std::abs(yB0(candidate)) > yCandRecoMax) {
         continue;
       }
 
@@ -184,16 +188,16 @@ struct HfTaskB0 {
 
   /// B0 MC analysis and fill histograms
   void processMc(soa::Filtered<soa::Join<aod::HfCandB0, aod::HfSelB0ToDPi, aod::HfCandB0McRec>> const& candidates,
-                 soa::Join<aod::McParticles, aod::HfCandB0McGen> const& particlesMc,
-                 aod::BigTracksMC const&,
+                 soa::Join<aod::McParticles, aod::HfCandB0McGen> const& mcParticles,
+                 aod::TracksWMc const&,
                  soa::Join<aod::HfCand3Prong, aod::HfCand3ProngMcRec> const&)
   {
     // MC rec
-    for (auto const& candidate : candidates) {
+    for (const auto& candidate : candidates) {
       if (!TESTBIT(candidate.hfflag(), hf_cand_b0::DecayType::B0ToDPi)) {
         continue;
       }
-      if (yCandMax >= 0. && std::abs(yB0(candidate)) > yCandMax) {
+      if (yCandRecoMax >= 0. && std::abs(yB0(candidate)) > yCandRecoMax) {
         continue;
       }
 
@@ -203,8 +207,8 @@ struct HfTaskB0 {
       int flagMcMatchRecB0 = std::abs(candidate.flagMcMatchRec());
 
       if (TESTBIT(flagMcMatchRecB0, hf_cand_b0::DecayTypeMc::B0ToDplusPiToPiKPiPi)) {
-        auto indexMother = RecoDecay::getMother(particlesMc, candidate.prong1_as<aod::BigTracksMC>().mcParticle_as<soa::Join<aod::McParticles, aod::HfCandB0McGen>>(), pdg::Code::kB0, true);
-        auto particleMother = particlesMc.rawIteratorAt(indexMother);
+        auto indexMother = RecoDecay::getMother(mcParticles, candidate.prong1_as<aod::TracksWMc>().mcParticle_as<soa::Join<aod::McParticles, aod::HfCandB0McGen>>(), pdg::Code::kB0, true);
+        auto particleMother = mcParticles.rawIteratorAt(indexMother);
 
         registry.fill(HIST("hPtGenSig"), particleMother.pt());
         registry.fill(HIST("hPtRecSig"), ptCandB0);
@@ -260,13 +264,12 @@ struct HfTaskB0 {
     } // rec
 
     // MC gen. level
-    // Printf("MC Particles: %d", particlesMc.size());
-    for (auto const& particle : particlesMc) {
+    for (const auto& particle : mcParticles) {
       if (TESTBIT(std::abs(particle.flagMcMatchGen()), hf_cand_b0::DecayType::B0ToDPi)) {
 
         auto ptParticle = particle.pt();
-        auto yParticle = RecoDecay::y(array{particle.px(), particle.py(), particle.pz()}, RecoDecay::getMassPDG(pdg::Code::kB0));
-        if (yCandMax >= 0. && std::abs(yParticle) > yCandMax) {
+        auto yParticle = RecoDecay::y(std::array{particle.px(), particle.py(), particle.pz()}, RecoDecay::getMassPDG(pdg::Code::kB0));
+        if (yCandGenMax >= 0. && std::abs(yParticle) > yCandGenMax) {
           continue;
         }
 
@@ -274,10 +277,10 @@ struct HfTaskB0 {
         std::array<float, 2> yProngs;
         std::array<float, 2> etaProngs;
         int counter = 0;
-        for (auto const& daught : particle.daughters_as<aod::McParticles>()) {
+        for (const auto& daught : particle.daughters_as<aod::McParticles>()) {
           ptProngs[counter] = daught.pt();
           etaProngs[counter] = daught.eta();
-          yProngs[counter] = RecoDecay::y(array{daught.px(), daught.py(), daught.pz()}, RecoDecay::getMassPDG(daught.pdgCode()));
+          yProngs[counter] = RecoDecay::y(std::array{daught.px(), daught.py(), daught.pz()}, RecoDecay::getMassPDG(daught.pdgCode()));
           counter++;
         }
 
@@ -287,9 +290,6 @@ struct HfTaskB0 {
         registry.fill(HIST("hYProng1Gen"), yProngs[1], ptParticle);
         registry.fill(HIST("hEtaProng0Gen"), etaProngs[0], ptParticle);
         registry.fill(HIST("hEtaProng1Gen"), etaProngs[1], ptParticle);
-
-        //  if (yCandMax >= 0. && (std::abs(yProngs[0]) > yCandMax || std::abs(yProngs[1]) > yCandMax))
-        //    continue;
 
         registry.fill(HIST("hPtGen"), ptParticle);
         registry.fill(HIST("hYGen"), yParticle, ptParticle);

@@ -13,15 +13,16 @@
 /// \brief Task used to extract the observables on single muons needed for the HF-muon analysis.
 /// \author Maolin Zhang <maolin.zhang@cern.ch>, CCNU
 
-#include "Common/DataModel/EventSelection.h"
-#include "Common/DataModel/TrackSelectionTables.h"
-#include "Framework/ASoAHelpers.h"
 #include "Framework/AnalysisDataModel.h"
 #include "Framework/AnalysisTask.h"
+#include "Framework/ASoAHelpers.h"
 #include "Framework/HistogramRegistry.h"
 #include "Framework/runDataProcessing.h"
 #include "ReconstructionDataFormats/TrackFwd.h"
+
 #include "Common/Core/RecoDecay.h"
+#include "Common/DataModel/EventSelection.h"
+#include "Common/DataModel/TrackSelectionTables.h"
 
 using namespace o2;
 using namespace o2::aod;
@@ -234,11 +235,16 @@ struct HfTaskSingleMuon {
     }
   }
 
-  void processMuon(soa::Filtered<MyCollisions>::iterator const& collision, MFTTracksExtra const& tracksMFT, MyMuons const& muons)
+  void processMuon(soa::Filtered<MyCollisions>::iterator const& collision,
+                   MFTTracksExtra const& tracksMFT,
+                   MyMuons const& muons)
   {
     runMuonSel(collision, tracksMFT, muons);
   }
-  void processMuonMc(soa::Filtered<MyCollisions>::iterator const& collision, MFTTracksExtra const& tracksMFT, soa::Filtered<MyMcMuons> const& muons, aod::McParticles const& mc)
+  void processMuonMc(soa::Filtered<MyCollisions>::iterator const& collision,
+                     MFTTracksExtra const& tracksMFT,
+                     soa::Filtered<MyMcMuons> const& muons,
+                     aod::McParticles const& mc)
   {
     runMuonSelMc(collision, tracksMFT, muons, mc);
   }

@@ -14,24 +14,29 @@
 ///
 /// \author Jochen Klein
 
-#include "TDatabasePDG.h"
-#include "TPDGCode.h"
+#include <TDatabasePDG.h>
+#include <TPDGCode.h>
+
 #include "CCDB/BasicCCDBManager.h"
-#include "Common/Core/RecoDecay.h"
-#include "Common/Core/trackUtilities.h"
-#include "Common/DataModel/TrackSelectionTables.h"
-#include "DataFormatsParameters/GRPObject.h"
 #include "DataFormatsParameters/GRPMagField.h"
+#include "DataFormatsParameters/GRPObject.h"
 #include "DCAFitter/DCAFitterN.h"
 #include "DetectorsBase/Propagator.h"
 #include "Framework/AnalysisDataModel.h"
 #include "Framework/AnalysisTask.h"
 #include "Framework/ASoA.h"
+#include "Framework/HistogramRegistry.h"
 #include "Framework/O2DatabasePDGPlugin.h"
 #include "Framework/runDataProcessing.h"
-#include "PWGHF/Core/SelectorCuts.h"
-#include "PWGLF/DataModel/LFStrangenessTables.h"
 #include "ReconstructionDataFormats/DCA.h"
+
+#include "Common/Core/RecoDecay.h"
+#include "Common/Core/trackUtilities.h"
+#include "Common/DataModel/TrackSelectionTables.h"
+
+#include "PWGLF/DataModel/LFStrangenessTables.h"
+
+#include "PWGHF/Core/SelectorCuts.h"
 
 using namespace o2;
 using namespace o2::framework;
@@ -105,7 +110,8 @@ struct HfTaskOmegacSt {
     df2.setUseAbsDCA(useAbsDCA);
   }
 
-  void processMc(aod::McCollision const& mcCollision, aod::McParticles const& mcParticles)
+  void processMc(aod::McCollision const& mcCollision,
+                 aod::McParticles const& mcParticles)
   {
     for (const auto& mcParticle : mcParticles) {
       if (mcParticle.pdgCode() != kOmegaMinus) {
@@ -122,9 +128,14 @@ struct HfTaskOmegacSt {
   }
   PROCESS_SWITCH(HfTaskOmegacSt, processMc, "Process MC", true);
 
-  void process(aod::Collision const& collision, aod::McCollisions const& mcCollisions,
-               aod::AssignedTrackedCascades const& trackedCascades, aod::Cascades const& cascades,
-               aod::V0s const& v0s, TracksExt const& tracks, aod::McParticles const& mcParticles, aod::BCsWithTimestamps const&)
+  void process(aod::Collision const& collision,
+               aod::McCollisions const&,
+               aod::AssignedTrackedCascades const& trackedCascades,
+               aod::Cascades const&,
+               aod::V0s const&,
+               TracksExt const& tracks,
+               aod::McParticles const&,
+               aod::BCsWithTimestamps const&)
   {
     const auto bc = collision.bc_as<aod::BCsWithTimestamps>();
     if (runNumber != bc.runNumber()) {
