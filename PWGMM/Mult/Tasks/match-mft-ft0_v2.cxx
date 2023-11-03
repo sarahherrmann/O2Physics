@@ -74,111 +74,23 @@ struct bctoft0c {
     mf(bc.globalIndex(), filler.ft0ids);
     if(filler.ft0ids.size() > 0)
     {
-      int localBC = bc.globalBC()%3564;//real BC (does not contain the orbit info)
+      int localBC = bc.globalBC()%3564;//local BC (does not contain the orbit info)
       registry.fill(HIST("BCwFT0"), localBC);
     }
 
   }
 };//struct bctoft0c
 
-struct ProduceMFTAmbii {
-  // build the index table MA2T
-  Builds<aod::MA2T> idx;
-  void init(InitContext const&){};
-  //Additionnal methods provided:
-  //mfttrack.has_ambMFTtrack()
-  //mfttrack.ambMFTtrack()
-};
 
 using ExtBCs = soa::Join<aod::BCs, aod::Timestamps, aod::MatchedToFT0>;
-using MFTTracksExtra = soa::Join<aod::MFTTracks,aod::MA2T>;//MFT track + index of ambiguous track
+
+
 
 template <typename T>
-T getCompatibleBCs(aod::AmbiguousMFTTrack const& atrack, aod::Collision const& collOrig, T const& bcs, int deltaBC)
-{
-
-  auto compBCs = atrack.bc_as<T>();//BC + info on FT0
-  auto bcIter = compBCs.begin();//first element of compBC
-  uint64_t firstBC = bcIter.globalBC();
-
-  bcIter.moveToEnd();//does it move to the end or the next one after the end ?
-  --bcIter;//to avoid a seg fault
-  uint64_t lastBC = bcIter.globalBC();//gives the last COMPATIBLE BC in compBCs
-
-
-  auto bcIt = collOrig.bc_as<T>();
-
-
-  int64_t minBCId = bcIt.globalIndex();
-  auto minGlobalBC = bcIt.globalBC();
-
-
-  if (bcIt.globalBC() < firstBC + deltaBC)
-  {
-    while (bcIt != bcs.end() && bcIt.globalBC() < firstBC + deltaBC)
-    {
-      minBCId = bcIt.globalIndex();
-      minGlobalBC = bcIt.globalBC();
-
-      ++bcIt;
-    }
-    if (bcIt == bcs.end())
-    {
-      --bcIt;
-      minBCId = bcIt.globalIndex();
-      minGlobalBC = bcIt.globalBC();
-    }
-  }
-  else
-  {
-    //here bcIt.globalBC() >= firstBC + deltaBC
-
-    while (bcIt != bcs.begin() && bcIt.globalBC() > firstBC + deltaBC)
-    {
-      minBCId = bcIt.globalIndex();
-      minGlobalBC = bcIt.globalBC();
-
-      --bcIt;
-    }
-  }
-
-  int64_t maxBCId = bcIt.globalIndex();
-  auto maxGlobalBC = bcIt.globalBC();
-
-  while (bcIt != bcs.end() && bcIt.globalBC() < lastBC + deltaBC)
-  {
-    maxBCId = bcIt.globalIndex();
-    maxGlobalBC = bcIt.globalBC();
-
-    ++bcIt;
-  }
-
-  if (bcIt != bcs.end() && maxBCId >= minBCId)
-  {
-    T slice{{bcs.asArrowTable()->Slice(minBCId, maxBCId - minBCId + 1)}, (uint64_t)minBCId};
-    bcs.copyIndexBindings(slice);
-    return slice;
-  }
-  else
-  {
-    T slice{{bcs.asArrowTable()->Slice(minBCId, maxBCId - minBCId)}, (uint64_t)minBCId};
-    bcs.copyIndexBindings(slice);
-    return slice;
-  }
-
-}
-
-template <typename T>
-T getCompatibleBCs(MFTTracksExtra::iterator const& track, aod::Collision const& collOrig, T const& bcs, int deltaBC)
+T getCompatibleBCs(aod::MFTTracks::iterator const& track, aod::Collision const& collOrig, T const& bcs, int deltaBC)
 {
 
   //define firstBC and lastBC (globalBC of beginning and end of the range, when no shift is applied)
-
-  if (track.has_ambMFTtrack())
-  {
-    auto atrack = track.ambMFTtrack();
-    return getCompatibleBCs(atrack, collOrig, bcs, deltaBC);
-  }
 
   auto bcIt = collOrig.bc_as<T>();
   //auto timstp = bcIt.timestamp();
@@ -486,7 +398,7 @@ struct matchmftfit {
   }
 
 
-  void processAmbi(MFTTracksExtra const& mfttracks,
+  void processAmbi(aod::MFTTracks const& mfttracks,
                aod::Collisions const&, ExtBCs const& bcs,
                aod::FT0s const&,
                aod::AmbiguousMFTTracks const& atracks)
@@ -515,15 +427,6 @@ struct matchmftfit {
         continue;
       }
       auto collOrig = track.collision();
-
-      bool isAmbiguous = false;
-
-
-
-      if (track.has_ambMFTtrack())
-      {
-        isAmbiguous=true;
-      }
 
 
       auto bcSlice = getCompatibleBCs(track, collOrig, bcs, shiftBC);
@@ -706,7 +609,6 @@ WorkflowSpec
   defineDataProcessing(ConfigContext const& cfgc)
 {
   WorkflowSpec workflow{adaptAnalysisTask<bctoft0c>(cfgc),
-                        adaptAnalysisTask<ProduceMFTAmbii>(cfgc),
                         adaptAnalysisTask<matchmftfit>(cfgc)
                       };
   return workflow;

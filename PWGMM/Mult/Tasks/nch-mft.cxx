@@ -39,7 +39,7 @@ AxisSpec EtaAxis = {180, -8.6, 8.6};
 
 struct nchMft {
 
-  Service<O2DatabasePDG> pdg;
+  Service<o2::framework::O2DatabasePDG> pdg;
 
   HistogramRegistry registry{
     "registry",

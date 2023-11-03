@@ -9,10 +9,10 @@
 # granted to it by virtue of its status as an Intergovernmental Organization
 # or submit itself to any jurisdiction.
 
-o2physics_add_dpl_workflow(onthefly-tracker
-                    SOURCES onTheFlyTracker.cxx
-                    PUBLIC_LINK_LIBRARIES O2::Framework O2::DetectorsBase O2Physics::AnalysisCore O2::ReconstructionDataFormats O2::DetectorsCommonDataFormats O2::DetectorsVertexing O2Physics::ALICE3Core
-                    COMPONENT_NAME Analysis)
+# o2physics_add_dpl_workflow(onthefly-tracker
+                    # SOURCES onTheFlyTracker.cxx
+                    # PUBLIC_LINK_LIBRARIES O2::Framework O2::DetectorsBase O2Physics::AnalysisCore O2::ReconstructionDataFormats O2::DetectorsCommonDataFormats O2::DetectorsVertexing O2Physics::ALICE3Core
+                    # COMPONENT_NAME Analysis)
 
 o2physics_add_dpl_workflow(onthefly-tofpid
                     SOURCES onTheFlyTOFPID.cxx

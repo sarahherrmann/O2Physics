@@ -121,7 +121,7 @@ class CollisionAssociation
   }
 
   template <uint32_t detType = 0u, typename TTracksUnfiltered, typename TTracks, typename TAmbiTracks, typename Assoc, typename RevIndices>
-  void runAssocWithTime(Collisions const& collisions,
+  void runAssocWithTime(o2::aod::Collisions const& collisions,
                         TTracksUnfiltered const& tracksUnfiltered,
                         TTracks const& tracks,
                         TAmbiTracks const& ambiguousTracks,
@@ -174,7 +174,7 @@ class CollisionAssociation
           trackTime+=mTimeShift;// middle of the MFT readout time window, shifted by mTimeShift
         }
 
-        const int64_t bcOffset = (int64_t)globalBC[track.filteredIndex()] + trackTime/constants::lhc::LHCBunchSpacingNS - (int64_t)collBC;
+        const int64_t bcOffset = (int64_t)globalBC[track.filteredIndex()] + trackTime/o2::constants::lhc::LHCBunchSpacingNS - (int64_t)collBC;
         //offset in BC between the middle of the track time window and the BC of the coll
 
         const int64_t bcOffsetCollToColl = (int64_t)globalBC[track.filteredIndex()] - (int64_t)collBC;
@@ -193,7 +193,7 @@ class CollisionAssociation
           }
         }
 
-        const float deltaTime = trackTime - collTime + bcOffsetCollToColl * constants::lhc::LHCBunchSpacingNS;
+        const float deltaTime = trackTime - collTime + bcOffsetCollToColl * o2::constants::lhc::LHCBunchSpacingNS;
 
         float sigmaTimeRes2 = collTimeRes2 + trackTimeRes * trackTimeRes;
         LOGP(debug, "collision time={}, collision time res={}, track time={}, track time res={}, bc collision={}, bc track={}, delta time={}", collTime, collision.collisionTimeRes(), track.trackTime(), track.trackTimeRes(), collBC, globalBC[track.filteredIndex()], deltaTime);
@@ -255,7 +255,7 @@ class CollisionAssociation
   float mNumSigmaForTimeCompat{4.};                                         // number of sigma for time compatibility
   float mTimeMargin{500.};                                                  // additional time margin in ns
   float mTimeShift{0.};                                                     // time shift of readout time window due to misalignment
-  int mTrackSelection{track_association::TrackSelection::GlobalTrackWoDCA}; // track selection for central barrel tracks (standard association only)
+  int mTrackSelection{o2::aod::track_association::TrackSelection::GlobalTrackWoDCA}; // track selection for central barrel tracks (standard association only)
   bool mUsePvAssociation{true};                                             // use the information of PV contributors
   bool mIncludeUnassigned{true};                                            // include tracks that were originally not assigned to any collision
   bool mFillTableOfCollIdsPerTrack{false};                                  // fill additional table with vectors of compatible collisions per track
